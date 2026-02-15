@@ -1,13 +1,11 @@
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LayoutGrid, List } from "lucide-react";
-import { mockUseCases, AutomationUseCase, mockProcesses } from "@/data/mockData";
+import { useNavigate } from "react-router-dom";
+import { mockUseCases, mockProcesses } from "@/data/mockData";
 
 const potentialColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
@@ -16,7 +14,7 @@ const potentialColors: Record<string, string> = {
 };
 
 const AutomationDiscovery = () => {
-  const [selected, setSelected] = useState<AutomationUseCase | null>(null);
+  const navigate = useNavigate();
   const approvedProcesses = mockProcesses.filter((p) => p.status === "approved" || p.status === "discovered");
 
   if (approvedProcesses.length === 0) {
@@ -45,7 +43,7 @@ const AutomationDiscovery = () => {
         <TabsContent value="cards" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
             {mockUseCases.map((uc) => (
-              <Card key={uc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelected(uc)}>
+              <Card key={uc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-sm font-medium">{uc.name}</CardTitle>
@@ -75,7 +73,7 @@ const AutomationDiscovery = () => {
                 </TableHeader>
                 <TableBody>
                   {mockUseCases.map((uc) => (
-                    <TableRow key={uc.id} className="cursor-pointer" onClick={() => setSelected(uc)}>
+                    <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                       <TableCell className="font-medium text-sm">{uc.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{uc.description}</TableCell>
                       <TableCell><Badge className={`text-xs capitalize ${potentialColors[uc.potential]}`}>{uc.potential}</Badge></TableCell>
@@ -89,51 +87,6 @@ const AutomationDiscovery = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Detail Sheet */}
-      <Sheet open={!!selected} onOpenChange={() => setSelected(null)}>
-        <SheetContent className="sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{selected?.name}</SheetTitle>
-            <SheetDescription>Automation use case details</SheetDescription>
-          </SheetHeader>
-          {selected && (
-            <div className="space-y-5 mt-4">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">Automation Potential</Label>
-                <Badge className={`capitalize ${potentialColors[selected.potential]}`}>{selected.potential}</Badge>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Description</Label>
-                <p className="text-sm mt-1">{selected.description}</p>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">How to Automate</Label>
-                <p className="text-sm mt-1">{selected.howToAutomate}</p>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Trigger</Label>
-                <p className="text-sm mt-1">{selected.trigger}</p>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Inputs</Label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {selected.inputs.map((inp, i) => <Badge key={i} variant="outline" className="text-xs">{inp}</Badge>)}
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Outputs</Label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {selected.outputs.map((out, i) => <Badge key={i} variant="outline" className="text-xs">{out}</Badge>)}
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Automated Process Description</Label>
-                <p className="text-sm mt-1">{selected.automatedProcessDescription}</p>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 };
