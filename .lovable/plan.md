@@ -1,79 +1,91 @@
 
-# Automation Discovery Dashboard — Implementation Plan
 
-## Design Direction
-Light & clean design with white/light gray backgrounds, professional typography, and subtle shadows. Inspired by tools like Notion and Figma — minimal, enterprise-ready, modern.
+# Enhanced As-Is Process Description — Rich, Editable Context for Accurate Discovery
 
-## Navigation & Layout
-- **Left sidebar** with collapsible navigation covering all core sections: Overview, Knowledge Base, Process Upload, Process Analysis, Automation Discovery
-- **Top header** with breadcrumbs and user avatar
-- **Step indicator** subtly showing the journey: Context → Upload → Analyze → Approve → Discover
+## Problem
+The current As-Is Process Description section is read-only — steps are displayed as static text with no way to edit, delete, add, or enrich them with the context needed to drive accurate automation discovery. Users cannot add business rules, constraints, pain points, or decision logic that are critical signals for automation detection.
 
----
+## What Changes
 
-## Page 1: Overview Dashboard
-The landing page with:
-- **Summary stat cards**: Total companies, departments, processes uploaded, automation use cases found
-- **Recent activity feed**: Latest uploads, approvals, discoveries
-- **Quick action buttons**: "Add Company", "Upload Process", "View Discoveries"
-- **Progress widget**: Shows how many processes are at each stage (uploaded, analyzed, approved, discovered)
+### 1. Editable Step List (replace static list)
+Each process step becomes a rich, interactive card showing:
+- **Step name** (inline editable)
+- **Description** (inline editable)
+- **Role** (editable dropdown/input)
+- **Tool used** (editable dropdown/input)
+- **New fields:**
+  - **Decision type**: Manual judgment / Rule-based / No decision
+  - **Data inputs**: What data enters this step
+  - **Data outputs**: What data leaves this step
+  - **Pain points / bottlenecks**: Free text (e.g., "Takes 2 hours on average", "Frequent errors")
+  - **Business rules**: Free text for conditions/thresholds (e.g., "If amount > $5000, escalate")
+  - **Frequency**: How often this step runs (daily, per-invoice, weekly, etc.)
+  - **Volume estimate**: Approximate number of executions per period
 
-## Page 2: Company Knowledge Base
-A structured, hierarchical data browser:
-- **Company list view** with cards showing industry, size, and department count
-- **Drill-down navigation**: Company → Departments → Entities → Activities/Projects
-- Each level has an **"Add" button** and items are clickable to expand/edit
-- **Detail panels** open as slide-over side panels with editable fields:
-  - Activities: description, business objective, tools used, documentation references
-  - Tools: name, purpose, type (manual/semi-automated/system), related docs
-- **Inline editing** and modal forms for adding new items
-- All data is mock/hardcoded
+Each step card has:
+- **Edit button** opening a detailed modal with all fields
+- **Delete button** with confirmation
+- Steps are **reorderable** via up/down arrows
 
-## Page 3: Process Upload & Context Assignment
-- **Drag-and-drop file upload area** for CSV files (UI only, no real parsing)
-- After "uploading", show a **context assignment form**:
-  - Select Company, Department, Entity, Activity/Project from dropdowns (populated with mock data from Knowledge Base)
-  - Free text area for notes, assumptions, constraints
-- **Upload history table** showing previously uploaded processes with status badges
+### 2. Add New Step
+A prominent "+ Add Step" button at the bottom of the step list opens a modal pre-filled with empty fields for all the above attributes.
 
-## Page 4: Process Analysis — As-Is Generation
-Triggered after selecting an uploaded process:
-- **As-Is Process Description panel**:
-  - Step-by-step textual breakdown (mock generated)
-  - Roles involved listed as tags
-  - Tools used listed as badges
-- **Interactive Flowchart** (full drag & drop):
-  - Nodes representing process steps, draggable and connectable
-  - Click a node to edit its name/description in a modal
-  - Delete nodes with a button
-  - Add new steps
-  - Built using a React flow library for drag-and-drop node editing
-- **"Approve As-Is Process" button** that transitions the process to the discovery phase
+### 3. Roles & Tools Management (editable)
+- Roles section becomes editable: add/remove role badges
+- Tools section becomes editable: add/remove tool badges
 
-## Page 5: Automation Use Case Discovery
-Visible only after approval:
-- **Cards view** (default): Each automation use case as a card showing:
-  - Use case name
-  - Description
-  - Automation potential badge (Low / Medium / High with color coding)
-- **Table view** toggle for a denser overview
-- **Side panel detail view** when clicking a use case:
-  - How it can be automated
-  - Trigger description
-  - Inputs & Outputs
-  - Description of the automated process
-- All data is mock, presented as if AI-generated
+### 4. New: Process-Level Context Section
+A new card below the steps list with editable fields:
+- **Process objective**: What this process is supposed to achieve
+- **Known constraints**: Compliance rules, SLAs, regulatory requirements
+- **Assumptions**: Any assumptions about how the process works
+- **Pain points summary**: Overall process-level issues
+- **Volume & frequency**: Overall process execution stats
+- **Stakeholder notes**: Free-text for additional analyst observations
 
----
+### 5. Approve Button Enhanced
+The "Approve As-Is" button moves to a prominent position at the bottom of the page (sticky bar style) with:
+- Label: "Approve & Run Discovery"
+- A subtitle: "Approving will trigger automation use case discovery based on the process and context above."
+- Disabled state if no steps exist
 
-## Mock Data
-Pre-populated with a realistic example:
-- 1 sample company ("Acme Corp") with 2-3 departments, entities, activities, and tools
-- 2 sample uploaded processes with mock analysis results
-- 1 approved process with 3-4 mock automation use cases
+## Technical Details
 
-## Key UX Details
-- Smooth transitions between steps
-- Toast notifications for actions (save, approve, upload)
-- Responsive layout (desktop-first but usable on tablet)
-- Empty states with helpful prompts when no data exists
+### Data model changes (`mockData.ts`)
+Extend `ProcessStep` interface with new optional fields:
+```
+decisionType?: "manual_judgment" | "rule_based" | "no_decision";
+dataInputs?: string[];
+dataOutputs?: string[];
+painPoints?: string;
+businessRules?: string;
+frequency?: string;
+volumeEstimate?: string;
+```
+
+Add new `ProcessContext` interface:
+```
+processObjective?: string;
+knownConstraints?: string;
+assumptions?: string;
+painPointsSummary?: string;
+volumeAndFrequency?: string;
+stakeholderNotes?: string;
+```
+
+Add `context` field to `ProcessAnalysis` interface.
+
+### Page changes (`ProcessAnalysis.tsx`)
+- Replace static step list with stateful editable step cards
+- Add step edit modal with all new fields
+- Add delete confirmation
+- Add reorder (move up/down) functionality
+- Add roles/tools inline editing (add/remove badges with input)
+- Add Process Context card with editable text areas
+- Move approve button to sticky bottom bar with enhanced messaging
+- All state managed locally (no backend)
+
+### Files modified
+1. `src/data/mockData.ts` — Extended interfaces and mock data
+2. `src/pages/ProcessAnalysis.tsx` — Full rebuild of the As-Is section with rich editing
+
