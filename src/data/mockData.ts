@@ -59,6 +59,22 @@ export interface ProcessStep {
   description: string;
   role: string;
   toolUsed: string;
+  decisionType?: "manual_judgment" | "rule_based" | "no_decision";
+  dataInputs?: string[];
+  dataOutputs?: string[];
+  painPoints?: string;
+  businessRules?: string;
+  frequency?: string;
+  volumeEstimate?: string;
+}
+
+export interface ProcessContext {
+  processObjective?: string;
+  knownConstraints?: string;
+  assumptions?: string;
+  painPointsSummary?: string;
+  volumeAndFrequency?: string;
+  stakeholderNotes?: string;
 }
 
 export interface ProcessAnalysis {
@@ -66,6 +82,7 @@ export interface ProcessAnalysis {
   steps: ProcessStep[];
   roles: string[];
   toolsUsed: string[];
+  context?: ProcessContext;
 }
 
 export interface AutomationUseCase {
@@ -228,28 +245,41 @@ export const mockAnalyses: Record<string, ProcessAnalysis> = {
   p1: {
     processId: "p1",
     steps: [
-      { id: "s1", name: "Receive Invoice", description: "Invoice received via email or postal mail", role: "AP Clerk", toolUsed: "Outlook" },
-      { id: "s2", name: "Log Invoice", description: "Enter invoice details into SAP ERP", role: "AP Clerk", toolUsed: "SAP ERP" },
-      { id: "s3", name: "Validate Invoice", description: "Cross-check invoice against purchase order and delivery receipt", role: "AP Analyst", toolUsed: "SAP ERP" },
-      { id: "s4", name: "Route for Approval", description: "Send invoice to department manager for approval via DocuSign", role: "AP Analyst", toolUsed: "DocuSign" },
-      { id: "s5", name: "Manager Approval", description: "Manager reviews and approves or rejects the invoice", role: "Department Manager", toolUsed: "DocuSign" },
-      { id: "s6", name: "Schedule Payment", description: "Approved invoices are scheduled for the next payment run", role: "AP Manager", toolUsed: "SAP ERP" },
-      { id: "s7", name: "Execute Payment", description: "Payment executed via bank transfer", role: "Treasury", toolUsed: "SAP ERP" },
+      { id: "s1", name: "Receive Invoice", description: "Invoice received via email or postal mail", role: "AP Clerk", toolUsed: "Outlook", decisionType: "no_decision", dataInputs: ["Invoice email"], dataOutputs: ["Invoice document"], frequency: "Per invoice", volumeEstimate: "~200/month", painPoints: "Invoices arrive in multiple formats (PDF, paper, image), causing delays" },
+      { id: "s2", name: "Log Invoice", description: "Enter invoice details into SAP ERP", role: "AP Clerk", toolUsed: "SAP ERP", decisionType: "no_decision", dataInputs: ["Invoice document"], dataOutputs: ["SAP invoice record"], frequency: "Per invoice", volumeEstimate: "~200/month", painPoints: "Manual data entry takes 10-15 min per invoice, frequent typos", businessRules: "All mandatory fields must be filled before saving" },
+      { id: "s3", name: "Validate Invoice", description: "Cross-check invoice against purchase order and delivery receipt", role: "AP Analyst", toolUsed: "SAP ERP", decisionType: "rule_based", dataInputs: ["Invoice record", "Purchase order", "Goods receipt"], dataOutputs: ["Validation result"], frequency: "Per invoice", painPoints: "Three-way match is tedious, mismatches require manual investigation", businessRules: "Invoice amount must match PO within 2% tolerance" },
+      { id: "s4", name: "Route for Approval", description: "Send invoice to department manager for approval via DocuSign", role: "AP Analyst", toolUsed: "DocuSign", decisionType: "rule_based", dataInputs: ["Validated invoice"], dataOutputs: ["Approval request"], businessRules: "If amount > $5,000, route to VP; otherwise route to dept manager" },
+      { id: "s5", name: "Manager Approval", description: "Manager reviews and approves or rejects the invoice", role: "Department Manager", toolUsed: "DocuSign", decisionType: "manual_judgment", dataInputs: ["Invoice details", "Budget status"], dataOutputs: ["Approval decision"], painPoints: "Managers often delay approvals by 2-3 days" },
+      { id: "s6", name: "Schedule Payment", description: "Approved invoices are scheduled for the next payment run", role: "AP Manager", toolUsed: "SAP ERP", decisionType: "rule_based", dataInputs: ["Approved invoice", "Payment terms"], dataOutputs: ["Payment schedule entry"], businessRules: "Group by vendor, prioritize early payment discounts" },
+      { id: "s7", name: "Execute Payment", description: "Payment executed via bank transfer", role: "Treasury", toolUsed: "SAP ERP", decisionType: "no_decision", dataInputs: ["Payment batch"], dataOutputs: ["Payment confirmation", "Bank statement entry"] },
     ],
     roles: ["AP Clerk", "AP Analyst", "Department Manager", "AP Manager", "Treasury"],
     toolsUsed: ["Outlook", "SAP ERP", "DocuSign"],
+    context: {
+      processObjective: "Process vendor invoices accurately and on time to maintain vendor relationships and capture early payment discounts.",
+      knownConstraints: "SOX compliance requires full audit trail. Payment SLA is net-30 from receipt.",
+      assumptions: "All invoices have a valid PO number. Vendors are already registered in SAP.",
+      painPointsSummary: "High manual effort in data entry and validation. Approval bottlenecks cause late payments. Multiple formats increase error rate.",
+      volumeAndFrequency: "~200 invoices/month, processed daily. Peak at month-end.",
+      stakeholderNotes: "AP team is open to automation. Finance director sponsors the initiative.",
+    },
   },
   p2: {
     processId: "p2",
     steps: [
-      { id: "s8", name: "Post Job Opening", description: "Create and publish job listing on Workday", role: "Recruiter", toolUsed: "Workday" },
-      { id: "s9", name: "Collect Applications", description: "Applications gathered via career portal", role: "Recruiter", toolUsed: "Workday" },
-      { id: "s10", name: "Screen Resumes", description: "Manual review of resumes against job requirements", role: "Recruiter", toolUsed: "Excel" },
-      { id: "s11", name: "Phone Screen", description: "Conduct initial phone interviews with shortlisted candidates", role: "Recruiter", toolUsed: "Teams" },
-      { id: "s12", name: "Schedule Interviews", description: "Coordinate interview slots with hiring managers", role: "Recruiter", toolUsed: "Outlook" },
+      { id: "s8", name: "Post Job Opening", description: "Create and publish job listing on Workday", role: "Recruiter", toolUsed: "Workday", decisionType: "no_decision", dataInputs: ["Job description", "Requirements"], dataOutputs: ["Published listing"] },
+      { id: "s9", name: "Collect Applications", description: "Applications gathered via career portal", role: "Recruiter", toolUsed: "Workday", decisionType: "no_decision", dataInputs: ["Career portal submissions"], dataOutputs: ["Application list"] },
+      { id: "s10", name: "Screen Resumes", description: "Manual review of resumes against job requirements", role: "Recruiter", toolUsed: "Excel", decisionType: "manual_judgment", dataInputs: ["Resumes", "Job requirements"], dataOutputs: ["Shortlist"], painPoints: "Takes 3-5 min per resume, highly subjective", businessRules: "Minimum 3 years experience for senior roles" },
+      { id: "s11", name: "Phone Screen", description: "Conduct initial phone interviews with shortlisted candidates", role: "Recruiter", toolUsed: "Teams", decisionType: "manual_judgment", dataInputs: ["Candidate profile"], dataOutputs: ["Interview notes", "Go/No-go decision"] },
+      { id: "s12", name: "Schedule Interviews", description: "Coordinate interview slots with hiring managers", role: "Recruiter", toolUsed: "Outlook", decisionType: "no_decision", dataInputs: ["Candidate availability", "Manager calendar"], dataOutputs: ["Interview schedule"], painPoints: "Back-and-forth emails to find available slots, takes 1-2 days" },
     ],
     roles: ["Recruiter", "Hiring Manager"],
     toolsUsed: ["Workday", "Excel", "Teams", "Outlook"],
+    context: {
+      processObjective: "Identify and screen qualified candidates efficiently to reduce time-to-hire.",
+      painPointsSummary: "Resume screening is time-consuming and inconsistent. Scheduling coordination causes delays.",
+      volumeAndFrequency: "~50 applications per open role, 5-8 open roles at any time.",
+    },
   },
 };
 
