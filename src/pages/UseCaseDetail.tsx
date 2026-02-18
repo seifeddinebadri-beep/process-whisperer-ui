@@ -12,10 +12,11 @@ import {
   ArrowLeft, AlertTriangle, CheckCircle2, XCircle, Info,
   Repeat, Binary, Zap, FileInput, ArrowRightLeft,
   User, Wrench, BookOpen, ShieldAlert, LinkIcon,
-  MessageSquare, Clock, ChevronRight,
+  MessageSquare,
 } from "lucide-react";
 import { mockUseCases } from "@/data/mockData";
-import { mockUseCaseDetails, TraceabilityLink, DetectionSignal } from "@/data/useCaseDetailData";
+import { mockUseCaseDetails, TraceabilityLink } from "@/data/useCaseDetailData";
+import { useLang } from "@/lib/i18n";
 
 const signalIcons: Record<string, React.ReactNode> = {
   repetitive_manual: <Repeat className="h-4 w-4" />,
@@ -26,7 +27,7 @@ const signalIcons: Record<string, React.ReactNode> = {
 };
 
 const traceIcons: Record<string, React.ReactNode> = {
-  process_step: <ChevronRight className="h-3.5 w-3.5" />,
+  process_step: <ArrowRightLeft className="h-3.5 w-3.5" />,
   role: <User className="h-3.5 w-3.5" />,
   tool: <Wrench className="h-3.5 w-3.5" />,
   business_rule: <BookOpen className="h-3.5 w-3.5" />,
@@ -47,6 +48,7 @@ const severityColors: Record<string, string> = {
 const UseCaseDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useLang();
   const [traceSelected, setTraceSelected] = useState<TraceabilityLink | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
@@ -59,22 +61,27 @@ const UseCaseDetail = () => {
     return (
       <div className="max-w-5xl p-8">
         <Button variant="ghost" onClick={() => navigate("/automation-discovery")}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Back
+          <ArrowLeft className="h-4 w-4 mr-2" /> {t.ucDetail.backToDiscovery}
         </Button>
         <Card className="mt-4 p-12 text-center">
-          <p className="text-muted-foreground">Use case not found.</p>
+          <p className="text-muted-foreground">{t.ucDetail.notFound}</p>
         </Card>
       </div>
     );
   }
 
+  const confidenceLabel = detail.confidenceLevel === "high"
+    ? t.ucDetail.confidenceHigh
+    : detail.confidenceLevel === "medium"
+    ? t.ucDetail.confidenceMedium
+    : t.ucDetail.confidenceLow;
+
   return (
     <div className="flex gap-6 max-w-[1400px]">
       {/* Main Content */}
       <div className="flex-1 min-w-0 space-y-6 pb-24">
-        {/* Back button */}
         <Button variant="ghost" size="sm" onClick={() => navigate("/automation-discovery")} className="text-muted-foreground">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Discovery
+          <ArrowLeft className="h-4 w-4 mr-1" /> {t.ucDetail.backToDiscovery}
         </Button>
 
         {/* ===== SECTION 1: Overview ===== */}
@@ -85,31 +92,33 @@ const UseCaseDetail = () => {
                 <CardTitle className="text-xl">{useCase.name}</CardTitle>
                 <CardDescription className="mt-1">{useCase.description}</CardDescription>
               </div>
-              <Badge className={`capitalize shrink-0 ${levelColors[useCase.potential]}`}>{useCase.potential} potential</Badge>
+              <Badge className={`capitalize shrink-0 ${levelColors[useCase.potential]}`}>
+                {t.discovery[useCase.potential as "low" | "medium" | "high"]} {t.discovery.potential.toLowerCase()}
+              </Badge>
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
-                <Label className="text-xs text-muted-foreground">Linked Process</Label>
+                <Label className="text-xs text-muted-foreground">{t.ucDetail.linkedProcess}</Label>
                 <p className="font-medium mt-0.5">{detail.linkedProcess}</p>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Department</Label>
+                <Label className="text-xs text-muted-foreground">{t.ucDetail.department}</Label>
                 <p className="font-medium mt-0.5">{detail.department}</p>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Entity</Label>
+                <Label className="text-xs text-muted-foreground">{t.ucDetail.entity}</Label>
                 <p className="font-medium mt-0.5">{detail.entity}</p>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Automation Pattern</Label>
+                <Label className="text-xs text-muted-foreground">{t.ucDetail.automationPattern}</Label>
                 <p className="font-medium mt-0.5">{detail.automationPattern}</p>
               </div>
             </div>
             <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
               <Info className="h-3.5 w-3.5 shrink-0" />
-              This automation was detected based on approved process and company context.
+              {t.ucDetail.detectedBased}
             </div>
           </CardContent>
         </Card>
@@ -117,12 +126,12 @@ const UseCaseDetail = () => {
         {/* ===== SECTION 2: Explainability ===== */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Why This Automation Was Detected</CardTitle>
-            <CardDescription>Structured explanation of detection signals and context</CardDescription>
+            <CardTitle className="text-base">{t.ucDetail.whyDetected}</CardTitle>
+            <CardDescription>{t.ucDetail.whyDetectedSub}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div>
-              <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Detection Signals</Label>
+              <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">{t.ucDetail.detectionSignals}</Label>
               <div className="mt-2 space-y-3">
                 {detail.detectionSignals.map((signal) => (
                   <div key={signal.id} className="flex gap-3 items-start border rounded-lg p-3 bg-muted/30">
@@ -131,8 +140,8 @@ const UseCaseDetail = () => {
                       <p className="text-sm font-medium">{signal.label}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">{signal.description}</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
-                        <span className="text-muted-foreground">Step: <span className="text-foreground font-medium">{signal.triggeringStep}</span></span>
-                        <span className="text-muted-foreground">Rule: <span className="text-foreground">{signal.ruleOrThreshold}</span></span>
+                        <span className="text-muted-foreground">{t.ucDetail.step}: <span className="text-foreground font-medium">{signal.triggeringStep}</span></span>
+                        <span className="text-muted-foreground">{t.ucDetail.rule}: <span className="text-foreground">{signal.ruleOrThreshold}</span></span>
                       </div>
                     </div>
                   </div>
@@ -143,7 +152,7 @@ const UseCaseDetail = () => {
             <Separator />
 
             <div>
-              <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Context Used</Label>
+              <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">{t.ucDetail.contextUsed}</Label>
               <div className="mt-2 flex flex-wrap gap-2">
                 {detail.contextReferences.map((ref) => (
                   <button
@@ -166,7 +175,7 @@ const UseCaseDetail = () => {
             <div className="flex items-start gap-2 bg-muted/50 rounded-md px-3 py-2.5">
               <CheckCircle2 className={`h-4 w-4 mt-0.5 shrink-0 ${detail.confidenceLevel === "high" ? "text-green-600" : detail.confidenceLevel === "medium" ? "text-amber-500" : "text-muted-foreground"}`} />
               <div>
-                <p className="text-sm font-medium capitalize">{detail.confidenceLevel} Confidence</p>
+                <p className="text-sm font-medium">{confidenceLabel}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{detail.confidenceExplanation}</p>
               </div>
             </div>
@@ -176,12 +185,12 @@ const UseCaseDetail = () => {
         {/* ===== SECTION 3: Scope ===== */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Automation Scope Definition</CardTitle>
-            <CardDescription>Clear boundaries of what will and will not be automated</CardDescription>
+            <CardTitle className="text-base">{t.ucDetail.scopeTitle}</CardTitle>
+            <CardDescription>{t.ucDetail.scopeSub}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide text-green-700">What Will Be Automated</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-green-700">{t.ucDetail.willBeAutomated}</Label>
               <div className="mt-2 space-y-2">
                 {detail.willBeAutomated.map((item, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
@@ -199,7 +208,7 @@ const UseCaseDetail = () => {
             <Separator />
 
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide text-amber-700">What Will Remain Manual</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t.ucDetail.willRemainManual}</Label>
               <div className="mt-2 space-y-2">
                 {detail.willRemainManual.map((item, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
@@ -216,7 +225,7 @@ const UseCaseDetail = () => {
             <Separator />
 
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide text-destructive">Explicit Exclusions</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-destructive">{t.ucDetail.explicitExclusions}</Label>
               <div className="mt-2 space-y-2">
                 {detail.explicitExclusions.map((item, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
@@ -235,8 +244,8 @@ const UseCaseDetail = () => {
         {/* ===== SECTION 4: Detailed Automated Process ===== */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Detailed Automated Process Description</CardTitle>
-            <CardDescription>Step-by-step narrative of the automated workflow</CardDescription>
+            <CardTitle className="text-base">{t.ucDetail.detailedSteps}</CardTitle>
+            <CardDescription>{t.ucDetail.detailedStepsSub}</CardDescription>
           </CardHeader>
           <CardContent>
             <Accordion type="multiple" className="w-full">
@@ -254,32 +263,32 @@ const UseCaseDetail = () => {
                     <div className="ml-9 space-y-3 text-sm">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <Label className="text-xs text-muted-foreground">Trigger</Label>
+                          <Label className="text-xs text-muted-foreground">{t.ucDetail.trigger}</Label>
                           <p className="mt-0.5">{step.trigger}</p>
                         </div>
                         <div>
-                          <Label className="text-xs text-muted-foreground">Output Produced</Label>
+                          <Label className="text-xs text-muted-foreground">{t.ucDetail.outputProduced}</Label>
                           <p className="mt-0.5">{step.outputProduced}</p>
                         </div>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Input Data</Label>
+                        <Label className="text-xs text-muted-foreground">{t.ucDetail.inputData}</Label>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {step.inputData.map((inp, j) => <Badge key={j} variant="outline" className="text-xs">{inp}</Badge>)}
                         </div>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Validation Rules</Label>
+                        <Label className="text-xs text-muted-foreground">{t.ucDetail.validationRules}</Label>
                         <ul className="list-disc list-inside mt-1 text-xs text-muted-foreground space-y-0.5">
                           {step.validationRules.map((rule, j) => <li key={j}>{rule}</li>)}
                         </ul>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">System Action</Label>
+                        <Label className="text-xs text-muted-foreground">{t.ucDetail.systemAction}</Label>
                         <p className="mt-0.5 text-xs">{step.systemAction}</p>
                       </div>
                       <div className="bg-muted/50 rounded px-3 py-2">
-                        <Label className="text-xs text-muted-foreground">Logging / Audit</Label>
+                        <Label className="text-xs text-muted-foreground">{t.ucDetail.logging}</Label>
                         <p className="mt-0.5 text-xs">{step.logging}</p>
                       </div>
                     </div>
@@ -293,8 +302,8 @@ const UseCaseDetail = () => {
         {/* ===== SECTION 5: Exceptions ===== */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Exception & Fallback Handling</CardTitle>
-            <CardDescription>What can go wrong and how it's handled — no hidden behavior</CardDescription>
+            <CardTitle className="text-base">{t.ucDetail.exceptions}</CardTitle>
+            <CardDescription>{t.ucDetail.exceptionsSub}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {detail.exceptions.map((ex) => (
@@ -305,25 +314,25 @@ const UseCaseDetail = () => {
                 </div>
                 <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div>
-                    <Label className="text-xs text-muted-foreground">How Detected</Label>
+                    <Label className="text-xs text-muted-foreground">{t.ucDetail.howDetected}</Label>
                     <p className="mt-0.5">{ex.howDetected}</p>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">What Happens Next</Label>
+                    <Label className="text-xs text-muted-foreground">{t.ucDetail.whatHappensNext}</Label>
                     <p className="mt-0.5">{ex.whatHappensNext}</p>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Who Is Notified</Label>
+                    <Label className="text-xs text-muted-foreground">{t.ucDetail.whoNotified}</Label>
                     <p className="mt-0.5">{ex.whoIsNotified}</p>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Data Preserved</Label>
+                    <Label className="text-xs text-muted-foreground">{t.ucDetail.dataPreserved}</Label>
                     <p className="mt-0.5">{ex.dataPreserved}</p>
                   </div>
                 </div>
                 {ex.severity === "high" && (
                   <div className="ml-6 mt-1">
-                    <Badge variant="destructive" className="text-xs">Automation stops here — Human intervention required</Badge>
+                    <Badge variant="destructive" className="text-xs">{t.ucDetail.automationStops}</Badge>
                   </div>
                 )}
               </div>
@@ -334,30 +343,29 @@ const UseCaseDetail = () => {
         {/* ===== SECTION 6: Before / After ===== */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Before / After Comparison</CardTitle>
+            <CardTitle className="text-base">{t.ucDetail.beforeAfter}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Before */}
               <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Before (Manual)</h4>
+                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{t.ucDetail.beforeManual}</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between border-b pb-1">
-                    <span className="text-muted-foreground">Number of steps</span>
+                    <span className="text-muted-foreground">{t.ucDetail.numberOfSteps}</span>
                     <span className="font-medium">{detail.comparison.before.steps}</span>
                   </div>
                   <div className="flex justify-between border-b pb-1">
-                    <span className="text-muted-foreground">Human effort</span>
+                    <span className="text-muted-foreground">{t.ucDetail.humanEffort}</span>
                     <span className="font-medium">{detail.comparison.before.humanEffort}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-xs">Tools involved</span>
+                    <span className="text-muted-foreground text-xs">{t.ucDetail.toolsInvolved}</span>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {detail.comparison.before.toolsInvolved.map((t, i) => <Badge key={i} variant="outline" className="text-xs">{t}</Badge>)}
+                      {detail.comparison.before.toolsInvolved.map((tool, i) => <Badge key={i} variant="outline" className="text-xs">{tool}</Badge>)}
                     </div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-xs">Error risks</span>
+                    <span className="text-muted-foreground text-xs">{t.ucDetail.errorRisks}</span>
                     <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
                       {detail.comparison.before.errorRisks.map((r, i) => <li key={i}>{r}</li>)}
                     </ul>
@@ -365,28 +373,27 @@ const UseCaseDetail = () => {
                 </div>
               </div>
 
-              {/* After */}
               <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-primary uppercase tracking-wide">After (Automated)</h4>
+                <h4 className="text-sm font-semibold text-primary uppercase tracking-wide">{t.ucDetail.afterAutomated}</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between border-b pb-1">
-                    <span className="text-muted-foreground">Reduced steps</span>
+                    <span className="text-muted-foreground">{t.ucDetail.reducedSteps}</span>
                     <span className="font-medium">{detail.comparison.after.steps}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-xs">Automation checkpoints</span>
+                    <span className="text-muted-foreground text-xs">{t.ucDetail.automationCheckpoints}</span>
                     <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
                       {detail.comparison.after.automationCheckpoints.map((c, i) => <li key={i}>{c}</li>)}
                     </ul>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-xs">Human touchpoints</span>
+                    <span className="text-muted-foreground text-xs">{t.ucDetail.humanTouchpoints}</span>
                     <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
                       {detail.comparison.after.humanTouchpoints.map((h, i) => <li key={i}>{h}</li>)}
                     </ul>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-xs">Residual risks</span>
+                    <span className="text-muted-foreground text-xs">{t.ucDetail.residualRisks}</span>
                     <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
                       {detail.comparison.after.residualRisks.map((r, i) => <li key={i}>{r}</li>)}
                     </ul>
@@ -400,33 +407,32 @@ const UseCaseDetail = () => {
         {/* ===== SECTION 7: Value & Feasibility ===== */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Value & Feasibility Assessment</CardTitle>
-            <CardDescription>Qualitative metrics — no ROI promises, only transparency</CardDescription>
+            <CardTitle className="text-base">{t.ucDetail.valueTitle}</CardTitle>
+            <CardDescription>{t.ucDetail.valueSub}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {detail.valueMetrics.map((vm, i) => (
               <div key={i} className="border rounded-lg p-4">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium">{vm.metric}</span>
-                  <Badge className={`capitalize text-xs ${levelColors[vm.level]}`}>{vm.level}</Badge>
+                  <Badge className={`capitalize text-xs ${levelColors[vm.level]}`}>{t.discovery[vm.level as "low"|"medium"|"high"]}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{vm.explanation}</p>
-                <p className="text-xs text-muted-foreground mt-1 italic">Assumption: {vm.assumptions}</p>
+                <p className="text-xs text-muted-foreground mt-1 italic">{t.ucDetail.assumption}: {vm.assumptions}</p>
               </div>
             ))}
           </CardContent>
         </Card>
 
-        {/* ===== SECTION 9: Validation & Decision (bottom area) ===== */}
+        {/* ===== Comments & Decision History ===== */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Comments & Decision History</CardTitle>
+            <CardTitle className="text-base">{t.ucDetail.commentsHistory}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Decision history */}
             {detail.decisions.length > 0 && (
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Decision History</Label>
+                <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">{t.ucDetail.decisionHistory}</Label>
                 {detail.decisions.map((dec) => (
                   <div key={dec.id} className="flex items-start gap-3 border rounded-lg p-3 bg-muted/30">
                     {dec.action === "approved" && <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />}
@@ -436,7 +442,7 @@ const UseCaseDetail = () => {
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="font-medium text-foreground">{dec.user}</span>
                         <span>•</span>
-                        <span>{new Date(dec.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                        <span>{new Date(dec.timestamp).toLocaleDateString("fr-FR", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                         <Badge variant="outline" className="capitalize text-xs">{dec.action.replace("_", " ")}</Badge>
                       </div>
                       <p className="text-sm mt-1">{dec.comment}</p>
@@ -446,17 +452,16 @@ const UseCaseDetail = () => {
               </div>
             )}
 
-            {/* Comments */}
             {detail.comments.length > 0 && (
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Discussion</Label>
+                <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">{t.ucDetail.discussion}</Label>
                 {detail.comments.map((com) => (
                   <div key={com.id} className="border rounded-lg p-3">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <MessageSquare className="h-3 w-3" />
                       <span className="font-medium text-foreground">{com.user}</span>
                       <span>•</span>
-                      <span>{new Date(com.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                      <span>{new Date(com.timestamp).toLocaleDateString("fr-FR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
                     <p className="text-sm mt-1">{com.text}</p>
                   </div>
@@ -464,18 +469,17 @@ const UseCaseDetail = () => {
               </div>
             )}
 
-            {/* Add comment */}
             <div className="flex gap-2">
               <Textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment about this use case…"
+                placeholder={t.ucDetail.addComment}
                 className="text-sm"
                 rows={2}
               />
             </div>
             <Button size="sm" variant="outline" disabled={!newComment.trim()} onClick={() => setNewComment("")}>
-              <MessageSquare className="h-3.5 w-3.5 mr-1" /> Post Comment
+              <MessageSquare className="h-3.5 w-3.5 mr-1" /> {t.ucDetail.postComment}
             </Button>
           </CardContent>
         </Card>
@@ -487,17 +491,23 @@ const UseCaseDetail = () => {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-1.5">
-                <LinkIcon className="h-4 w-4" /> Traceability
+                <LinkIcon className="h-4 w-4" /> {t.ucDetail.traceability}
               </CardTitle>
-              <CardDescription className="text-xs">Linked elements for auditability</CardDescription>
+              <CardDescription className="text-xs">{t.ucDetail.traceabilitySub}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {(["process_step", "role", "tool", "business_rule"] as const).map((type) => {
                 const items = detail.traceabilityLinks.filter((l) => l.type === type);
                 if (items.length === 0) return null;
+                const typeLabels: Record<string, string> = {
+                  process_step: t.ucDetail.processSteps,
+                  role: t.ucDetail.roles,
+                  tool: t.ucDetail.tools,
+                  business_rule: t.ucDetail.businessRules,
+                };
                 return (
                   <div key={type}>
-                    <Label className="text-xs text-muted-foreground capitalize">{type.replace("_", " ")}s</Label>
+                    <Label className="text-xs text-muted-foreground">{typeLabels[type]}</Label>
                     <div className="mt-1 space-y-1">
                       {items.map((item, i) => (
                         <button
@@ -534,21 +544,21 @@ const UseCaseDetail = () => {
         </SheetContent>
       </Sheet>
 
-      {/* ===== SECTION 9: Sticky Action Bar ===== */}
+      {/* ===== Sticky Action Bar ===== */}
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between px-6 py-3">
           <div className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{useCase.name}</span> — Validation & Decision
+            <span className="font-medium text-foreground">{useCase.name}</span> — {t.ucDetail.validation}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowRejectDialog(!showRejectDialog)}>
-              <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+              <XCircle className="h-3.5 w-3.5 mr-1" /> {t.ucDetail.reject}
             </Button>
             <Button variant="outline" size="sm">
-              <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Request Changes
+              <AlertTriangle className="h-3.5 w-3.5 mr-1" /> {t.ucDetail.requestChanges}
             </Button>
             <Button size="sm">
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve Use Case
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {t.ucDetail.approve}
             </Button>
           </div>
         </div>
@@ -558,12 +568,12 @@ const UseCaseDetail = () => {
               <Textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Provide a reason for rejection…"
+                placeholder={t.ucDetail.rejectReason}
                 rows={2}
                 className="text-sm"
               />
               <Button variant="destructive" size="sm" disabled={!rejectReason.trim()} onClick={() => { setShowRejectDialog(false); setRejectReason(""); }}>
-                Confirm Reject
+                {t.ucDetail.confirmReject}
               </Button>
             </div>
           </div>

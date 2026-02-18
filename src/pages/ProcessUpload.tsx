@@ -9,8 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Upload, FileUp } from "lucide-react";
 import { mockCompanies, mockProcesses } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
+import { useLang } from "@/lib/i18n";
 
 const ProcessUpload = () => {
+  const { t } = useLang();
   const [dragOver, setDragOver] = useState(false);
   const [uploaded, setUploaded] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState("");
@@ -26,8 +28,8 @@ const ProcessUpload = () => {
     e.preventDefault();
     setDragOver(false);
     setUploaded(true);
-    toast({ title: "File uploaded", description: "Ready for context assignment." });
-  }, []);
+    toast({ title: t.upload.fileUploaded, description: t.upload.readyForAnalysis });
+  }, [t]);
 
   const statusColor: Record<string, string> = {
     uploaded: "bg-secondary text-secondary-foreground",
@@ -36,24 +38,31 @@ const ProcessUpload = () => {
     discovered: "bg-amber-100 text-amber-800",
   };
 
+  const statusLabel: Record<string, string> = {
+    uploaded: t.overview.uploaded,
+    analyzed: t.overview.analyzed,
+    approved: t.overview.approved,
+    discovered: t.overview.discovered,
+  };
+
   return (
     <div className="max-w-5xl space-y-6">
       {/* Upload Area */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Upload Process Data</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t.upload.title}</CardTitle></CardHeader>
         <CardContent>
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
-            onClick={() => { setUploaded(true); toast({ title: "File uploaded" }); }}
+            onClick={() => { setUploaded(true); toast({ title: t.upload.fileUploaded }); }}
             className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
               dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
             }`}
           >
             <FileUp className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-sm font-medium text-foreground">Drop your CSV file here or click to upload</p>
-            <p className="text-xs text-muted-foreground mt-1">Supports .csv event log files</p>
+            <p className="text-sm font-medium text-foreground">{t.upload.dropHere}</p>
+            <p className="text-xs text-muted-foreground mt-1">{t.upload.supports}</p>
           </div>
         </CardContent>
       </Card>
@@ -61,44 +70,44 @@ const ProcessUpload = () => {
       {/* Context Assignment */}
       {uploaded && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Assign Context</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t.upload.assignContext}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label>Company</Label>
+                <Label>{t.upload.company}</Label>
                 <Select value={selectedCompany} onValueChange={(v) => { setSelectedCompany(v); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity(""); }}>
-                  <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t.upload.selectCompany} /></SelectTrigger>
                   <SelectContent>{mockCompanies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Department</Label>
+                <Label>{t.upload.department}</Label>
                 <Select value={selectedDept} onValueChange={(v) => { setSelectedDept(v); setSelectedEntity(""); setSelectedActivity(""); }} disabled={!company}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t.upload.selectDept} /></SelectTrigger>
                   <SelectContent>{company?.departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Entity</Label>
+                <Label>{t.upload.entity}</Label>
                 <Select value={selectedEntity} onValueChange={(v) => { setSelectedEntity(v); setSelectedActivity(""); }} disabled={!dept}>
-                  <SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t.upload.selectEntity} /></SelectTrigger>
                   <SelectContent>{dept?.entities.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Activity / Project</Label>
+                <Label>{t.upload.activity}</Label>
                 <Select value={selectedActivity} onValueChange={setSelectedActivity} disabled={!entity}>
-                  <SelectTrigger><SelectValue placeholder="Select activity" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t.upload.selectActivity} /></SelectTrigger>
                   <SelectContent>{entity?.activities.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
             <div>
-              <Label>Notes & Assumptions</Label>
-              <Textarea placeholder="Add any context, assumptions, or constraints..." />
+              <Label>{t.upload.notes}</Label>
+              <Textarea placeholder={t.upload.notesPlaceholder} />
             </div>
-            <Button onClick={() => toast({ title: "Context assigned", description: "Process is ready for analysis." })}>
-              <Upload className="h-4 w-4 mr-1" /> Submit
+            <Button onClick={() => toast({ title: t.upload.contextAssigned, description: t.upload.readyForAnalysis })}>
+              <Upload className="h-4 w-4 mr-1" /> {t.upload.submit}
             </Button>
           </CardContent>
         </Card>
@@ -106,15 +115,15 @@ const ProcessUpload = () => {
 
       {/* Upload History */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Upload History</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t.upload.uploadHistory}</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>File</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t.upload.file}</TableHead>
+                <TableHead>{t.upload.date}</TableHead>
+                <TableHead>{t.upload.company}</TableHead>
+                <TableHead>{t.upload.status}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -125,7 +134,7 @@ const ProcessUpload = () => {
                     <TableCell className="font-medium text-sm">{p.fileName}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{p.uploadDate}</TableCell>
                     <TableCell className="text-sm">{c?.name}</TableCell>
-                    <TableCell><Badge className={`capitalize text-xs ${statusColor[p.status]}`}>{p.status}</Badge></TableCell>
+                    <TableCell><Badge className={`capitalize text-xs ${statusColor[p.status]}`}>{statusLabel[p.status]}</Badge></TableCell>
                   </TableRow>
                 );
               })}

@@ -8,13 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { ChevronRight, Plus, Building2, ArrowLeft, Pencil, Wrench } from "lucide-react";
+import { ChevronRight, Plus, Building2, ArrowLeft, Wrench } from "lucide-react";
 import { mockCompanies, Company, Department, Entity, Activity, Tool } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
+import { useLang } from "@/lib/i18n";
 
 type View = "companies" | "departments" | "entities" | "activities";
 
 const KnowledgeBase = () => {
+  const { t } = useLang();
   const [companies, setCompanies] = useState<Company[]>(mockCompanies);
   const [view, setView] = useState<View>("companies");
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -28,7 +30,7 @@ const KnowledgeBase = () => {
   const [showAddActivity, setShowAddActivity] = useState(false);
 
   const breadcrumb = () => {
-    const parts: { label: string; onClick?: () => void }[] = [{ label: "Companies", onClick: () => { setView("companies"); setSelectedCompany(null); } }];
+    const parts: { label: string; onClick?: () => void }[] = [{ label: t.kb.companies, onClick: () => { setView("companies"); setSelectedCompany(null); } }];
     if (selectedCompany) parts.push({ label: selectedCompany.name, onClick: () => { setView("departments"); setSelectedDept(null); } });
     if (selectedDept) parts.push({ label: selectedDept.name, onClick: () => { setView("entities"); setSelectedEntity(null); } });
     if (selectedEntity) parts.push({ label: selectedEntity.name });
@@ -57,8 +59,8 @@ const KnowledgeBase = () => {
       {view === "companies" && (
         <>
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Companies</h2>
-            <Button size="sm" onClick={() => setShowAddCompany(true)}><Plus className="h-4 w-4 mr-1" /> Add Company</Button>
+            <h2 className="text-lg font-semibold">{t.kb.companies}</h2>
+            <Button size="sm" onClick={() => setShowAddCompany(true)}><Plus className="h-4 w-4 mr-1" /> {t.kb.addCompany}</Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {companies.map((c) => (
@@ -73,8 +75,8 @@ const KnowledgeBase = () => {
                 <CardContent>
                   <div className="flex gap-2 text-xs text-muted-foreground">
                     <Badge variant="secondary">{c.size}</Badge>
-                    <Badge variant="secondary">{c.departments.length} departments</Badge>
-                    <Badge variant="secondary">{c.tools.length} tools</Badge>
+                    <Badge variant="secondary">{c.departments.length} {t.kb.depEntities.replace("activités","départements").replace("activities","departments")}</Badge>
+                    <Badge variant="secondary">{c.tools.length} {t.kb.tools.toLowerCase()}</Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -89,13 +91,13 @@ const KnowledgeBase = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" onClick={() => { setView("companies"); setSelectedCompany(null); }}><ArrowLeft className="h-4 w-4" /></Button>
-              <h2 className="text-lg font-semibold">Departments — {selectedCompany.name}</h2>
+              <h2 className="text-lg font-semibold">{t.kb.departments} — {selectedCompany.name}</h2>
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setDetailTool(selectedCompany.tools[0] || null)}>
-                <Wrench className="h-4 w-4 mr-1" /> View Tools ({selectedCompany.tools.length})
+                <Wrench className="h-4 w-4 mr-1" /> {t.kb.viewTools} ({selectedCompany.tools.length})
               </Button>
-              <Button size="sm" onClick={() => setShowAddDept(true)}><Plus className="h-4 w-4 mr-1" /> Add Department</Button>
+              <Button size="sm" onClick={() => setShowAddDept(true)}><Plus className="h-4 w-4 mr-1" /> {t.kb.addDepartment}</Button>
             </div>
           </div>
           <div className="grid gap-3">
@@ -105,7 +107,7 @@ const KnowledgeBase = () => {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium">{d.name}</CardTitle>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{d.entities.length} entities</span>
+                      <span>{d.entities.length} {t.kb.entities.toLowerCase()}</span>
                       <ChevronRight className="h-4 w-4" />
                     </div>
                   </div>
@@ -122,9 +124,9 @@ const KnowledgeBase = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" onClick={() => { setView("departments"); setSelectedDept(null); }}><ArrowLeft className="h-4 w-4" /></Button>
-              <h2 className="text-lg font-semibold">Entities — {selectedDept.name}</h2>
+              <h2 className="text-lg font-semibold">{t.kb.entities} — {selectedDept.name}</h2>
             </div>
-            <Button size="sm" onClick={() => setShowAddEntity(true)}><Plus className="h-4 w-4 mr-1" /> Add Entity</Button>
+            <Button size="sm" onClick={() => setShowAddEntity(true)}><Plus className="h-4 w-4 mr-1" /> {t.kb.addEntity}</Button>
           </div>
           <div className="grid gap-3">
             {selectedDept.entities.map((e) => (
@@ -133,7 +135,7 @@ const KnowledgeBase = () => {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium">{e.name}</CardTitle>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{e.activities.length} activities</span>
+                      <span>{e.activities.length} {t.kb.activities.toLowerCase()}</span>
                       <ChevronRight className="h-4 w-4" />
                     </div>
                   </div>
@@ -150,9 +152,9 @@ const KnowledgeBase = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" onClick={() => { setView("entities"); setSelectedEntity(null); }}><ArrowLeft className="h-4 w-4" /></Button>
-              <h2 className="text-lg font-semibold">Activities — {selectedEntity.name}</h2>
+              <h2 className="text-lg font-semibold">{t.kb.activities} — {selectedEntity.name}</h2>
             </div>
-            <Button size="sm" onClick={() => setShowAddActivity(true)}><Plus className="h-4 w-4 mr-1" /> Add Activity</Button>
+            <Button size="sm" onClick={() => setShowAddActivity(true)}><Plus className="h-4 w-4 mr-1" /> {t.kb.addActivity}</Button>
           </div>
           <div className="grid gap-3">
             {selectedEntity.activities.map((a) => (
@@ -181,14 +183,14 @@ const KnowledgeBase = () => {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>{detailActivity?.name}</SheetTitle>
-            <SheetDescription>Activity details</SheetDescription>
+            <SheetDescription>{t.kb.activityDetails}</SheetDescription>
           </SheetHeader>
           {detailActivity && (
             <div className="space-y-4 mt-4">
-              <div><Label className="text-xs text-muted-foreground">Description</Label><p className="text-sm mt-1">{detailActivity.description}</p></div>
-              <div><Label className="text-xs text-muted-foreground">Business Objective</Label><p className="text-sm mt-1">{detailActivity.businessObjective}</p></div>
+              <div><Label className="text-xs text-muted-foreground">{t.kb.description}</Label><p className="text-sm mt-1">{detailActivity.description}</p></div>
+              <div><Label className="text-xs text-muted-foreground">{t.kb.businessObjective}</Label><p className="text-sm mt-1">{detailActivity.businessObjective}</p></div>
               <div>
-                <Label className="text-xs text-muted-foreground">Tools Used</Label>
+                <Label className="text-xs text-muted-foreground">{t.kb.toolsUsed}</Label>
                 <div className="flex gap-2 mt-1 flex-wrap">
                   {detailActivity.tools.map((tId) => {
                     const tool = selectedCompany?.tools.find((t) => t.id === tId);
@@ -197,7 +199,7 @@ const KnowledgeBase = () => {
                 </div>
               </div>
               {detailActivity.documentation && (
-                <div><Label className="text-xs text-muted-foreground">Documentation</Label>
+                <div><Label className="text-xs text-muted-foreground">{t.kb.documentation}</Label>
                   <div className="mt-1">{detailActivity.documentation.map((d, i) => <Badge key={i} variant="outline" className="text-xs mr-1">{d}</Badge>)}</div>
                 </div>
               )}
@@ -210,19 +212,19 @@ const KnowledgeBase = () => {
       <Sheet open={!!detailTool} onOpenChange={() => setDetailTool(null)}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Tools — {selectedCompany?.name}</SheetTitle>
-            <SheetDescription>All tools in use</SheetDescription>
+            <SheetTitle>{t.kb.tools} — {selectedCompany?.name}</SheetTitle>
+            <SheetDescription>{t.kb.allTools}</SheetDescription>
           </SheetHeader>
           <div className="space-y-3 mt-4">
-            {selectedCompany?.tools.map((t) => (
-              <Card key={t.id}>
+            {selectedCompany?.tools.map((tool) => (
+              <Card key={tool.id}>
                 <CardHeader className="py-3">
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-sm">{t.name}</CardTitle>
-                      <CardDescription className="text-xs mt-0.5">{t.purpose}</CardDescription>
+                      <CardTitle className="text-sm">{tool.name}</CardTitle>
+                      <CardDescription className="text-xs mt-0.5">{tool.purpose}</CardDescription>
                     </div>
-                    <Badge variant="secondary" className="text-xs capitalize">{t.type}</Badge>
+                    <Badge variant="secondary" className="text-xs capitalize">{tool.type}</Badge>
                   </div>
                 </CardHeader>
               </Card>
@@ -234,13 +236,13 @@ const KnowledgeBase = () => {
       {/* Add Company Dialog */}
       <Dialog open={showAddCompany} onOpenChange={setShowAddCompany}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Company</DialogTitle><DialogDescription>Enter company details</DialogDescription></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); toast({ title: "Company added" }); setShowAddCompany(false); }} className="space-y-3">
-            <div><Label>Name</Label><Input placeholder="Company name" required /></div>
-            <div><Label>Industry</Label><Input placeholder="e.g. Manufacturing" required /></div>
-            <div><Label>Size</Label><Input placeholder="e.g. 500-1,000 employees" /></div>
-            <div><Label>Strategy Notes</Label><Textarea placeholder="Strategic context..." /></div>
-            <DialogFooter><Button type="submit">Add Company</Button></DialogFooter>
+          <DialogHeader><DialogTitle>{t.kb.addCompany}</DialogTitle><DialogDescription>{t.kb.enterCompanyDetails}</DialogDescription></DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); toast({ title: t.kb.companyAdded }); setShowAddCompany(false); }} className="space-y-3">
+            <div><Label>{t.kb.name}</Label><Input placeholder={t.kb.companyName} required /></div>
+            <div><Label>{t.kb.industry}</Label><Input placeholder="ex. Industrie manufacturière" required /></div>
+            <div><Label>{t.kb.size}</Label><Input placeholder="ex. 500-1 000 employés" /></div>
+            <div><Label>{t.kb.strategyNotes}</Label><Textarea placeholder="Contexte stratégique..." /></div>
+            <DialogFooter><Button type="submit">{t.kb.addCompany}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -248,10 +250,10 @@ const KnowledgeBase = () => {
       {/* Add Department Dialog */}
       <Dialog open={showAddDept} onOpenChange={setShowAddDept}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Department</DialogTitle><DialogDescription>Add a new department</DialogDescription></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); toast({ title: "Department added" }); setShowAddDept(false); }} className="space-y-3">
-            <div><Label>Department Name</Label><Input placeholder="e.g. Finance" required /></div>
-            <DialogFooter><Button type="submit">Add</Button></DialogFooter>
+          <DialogHeader><DialogTitle>{t.kb.addDepartment}</DialogTitle><DialogDescription>{t.kb.addNewDepartment}</DialogDescription></DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); toast({ title: t.kb.departmentAdded }); setShowAddDept(false); }} className="space-y-3">
+            <div><Label>{t.kb.name}</Label><Input placeholder={t.kb.departmentName} required /></div>
+            <DialogFooter><Button type="submit">{t.kb.add}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -259,10 +261,10 @@ const KnowledgeBase = () => {
       {/* Add Entity Dialog */}
       <Dialog open={showAddEntity} onOpenChange={setShowAddEntity}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Entity</DialogTitle><DialogDescription>Add a new entity</DialogDescription></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); toast({ title: "Entity added" }); setShowAddEntity(false); }} className="space-y-3">
-            <div><Label>Entity Name</Label><Input placeholder="e.g. Accounts Payable" required /></div>
-            <DialogFooter><Button type="submit">Add</Button></DialogFooter>
+          <DialogHeader><DialogTitle>{t.kb.addEntity}</DialogTitle><DialogDescription>{t.kb.addNewEntity}</DialogDescription></DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); toast({ title: t.kb.entityAdded }); setShowAddEntity(false); }} className="space-y-3">
+            <div><Label>{t.kb.name}</Label><Input placeholder={t.kb.entityName} required /></div>
+            <DialogFooter><Button type="submit">{t.kb.add}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -270,12 +272,12 @@ const KnowledgeBase = () => {
       {/* Add Activity Dialog */}
       <Dialog open={showAddActivity} onOpenChange={setShowAddActivity}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Activity</DialogTitle><DialogDescription>Add a new activity</DialogDescription></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); toast({ title: "Activity added" }); setShowAddActivity(false); }} className="space-y-3">
-            <div><Label>Name</Label><Input placeholder="Activity name" required /></div>
-            <div><Label>Description</Label><Textarea placeholder="Describe the activity..." required /></div>
-            <div><Label>Business Objective</Label><Input placeholder="e.g. Reduce processing time" /></div>
-            <DialogFooter><Button type="submit">Add</Button></DialogFooter>
+          <DialogHeader><DialogTitle>{t.kb.addActivity}</DialogTitle><DialogDescription>{t.kb.addNewActivity}</DialogDescription></DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); toast({ title: t.kb.activityAdded }); setShowAddActivity(false); }} className="space-y-3">
+            <div><Label>{t.kb.name}</Label><Input placeholder={t.kb.activityName} required /></div>
+            <div><Label>{t.kb.description}</Label><Textarea placeholder="Décrire l'activité..." required /></div>
+            <div><Label>{t.kb.businessObjective}</Label><Input placeholder="ex. Réduire le temps de traitement" /></div>
+            <DialogFooter><Button type="submit">{t.kb.add}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

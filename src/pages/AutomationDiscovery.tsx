@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LayoutGrid, List } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { mockUseCases, mockProcesses } from "@/data/mockData";
+import { useLang } from "@/lib/i18n";
 
 const potentialColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
@@ -15,13 +16,14 @@ const potentialColors: Record<string, string> = {
 
 const AutomationDiscovery = () => {
   const navigate = useNavigate();
+  const { t } = useLang();
   const approvedProcesses = mockProcesses.filter((p) => p.status === "approved" || p.status === "discovered");
 
   if (approvedProcesses.length === 0) {
     return (
       <div className="max-w-5xl">
         <Card className="p-12 text-center">
-          <p className="text-muted-foreground">No approved processes yet. Approve an as-is process first to discover automation use cases.</p>
+          <p className="text-muted-foreground">{t.discovery.noApproved}</p>
         </Card>
       </div>
     );
@@ -30,14 +32,14 @@ const AutomationDiscovery = () => {
   return (
     <div className="max-w-6xl space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Automation Use Cases</h2>
-        <p className="text-sm text-muted-foreground">AI-discovered automation opportunities from approved processes</p>
+        <h2 className="text-lg font-semibold">{t.discovery.title}</h2>
+        <p className="text-sm text-muted-foreground">{t.discovery.subtitle}</p>
       </div>
 
       <Tabs defaultValue="cards">
         <TabsList>
-          <TabsTrigger value="cards"><LayoutGrid className="h-4 w-4 mr-1" /> Cards</TabsTrigger>
-          <TabsTrigger value="table"><List className="h-4 w-4 mr-1" /> Table</TabsTrigger>
+          <TabsTrigger value="cards"><LayoutGrid className="h-4 w-4 mr-1" /> {t.discovery.cards}</TabsTrigger>
+          <TabsTrigger value="table"><List className="h-4 w-4 mr-1" /> {t.discovery.table}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cards" className="mt-4">
@@ -47,12 +49,12 @@ const AutomationDiscovery = () => {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-sm font-medium">{uc.name}</CardTitle>
-                    <Badge className={`text-xs capitalize ${potentialColors[uc.potential]}`}>{uc.potential}</Badge>
+                    <Badge className={`text-xs capitalize ${potentialColors[uc.potential]}`}>{t.discovery[uc.potential as "low"|"medium"|"high"]}</Badge>
                   </div>
-                  <CardDescription className="text-xs line-clamp-2">{uc.description}</CardDescription>
+                  <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{uc.description}</p>
                 </CardHeader>
                 <CardContent>
-                  <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">View details →</Button>
+                  <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">{t.discovery.viewDetails}</Button>
                 </CardContent>
               </Card>
             ))}
@@ -65,9 +67,9 @@ const AutomationDiscovery = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Use Case</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Potential</TableHead>
+                    <TableHead>{t.discovery.useCase}</TableHead>
+                    <TableHead>{t.discovery.description}</TableHead>
+                    <TableHead>{t.discovery.potential}</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -76,8 +78,8 @@ const AutomationDiscovery = () => {
                     <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                       <TableCell className="font-medium text-sm">{uc.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{uc.description}</TableCell>
-                      <TableCell><Badge className={`text-xs capitalize ${potentialColors[uc.potential]}`}>{uc.potential}</Badge></TableCell>
-                      <TableCell><Button variant="ghost" size="sm" className="text-xs">Details</Button></TableCell>
+                      <TableCell><Badge className={`text-xs capitalize ${potentialColors[uc.potential]}`}>{t.discovery[uc.potential as "low"|"medium"|"high"]}</Badge></TableCell>
+                      <TableCell><Button variant="ghost" size="sm" className="text-xs">{t.discovery.details}</Button></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -86,7 +88,6 @@ const AutomationDiscovery = () => {
           </Card>
         </TabsContent>
       </Tabs>
-
     </div>
   );
 };

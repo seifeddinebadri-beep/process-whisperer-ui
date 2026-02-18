@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProcessStep } from "@/data/mockData";
+import { useLang } from "@/lib/i18n";
 
 interface StepEditModalProps {
   step: ProcessStep | null;
@@ -15,7 +16,8 @@ interface StepEditModalProps {
   title?: string;
 }
 
-export const StepEditModal = ({ step, open, onClose, onSave, title = "Edit Step" }: StepEditModalProps) => {
+export const StepEditModal = ({ step, open, onClose, onSave, title }: StepEditModalProps) => {
+  const { t } = useLang();
   const [local, setLocal] = useState<ProcessStep | null>(step);
 
   useEffect(() => {
@@ -28,77 +30,79 @@ export const StepEditModal = ({ step, open, onClose, onSave, title = "Edit Step"
     setLocal({ ...local, [field]: value });
   };
 
+  const modalTitle = title || t.stepModal.editTitle;
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Enrich this step with details that drive accurate automation discovery.</DialogDescription>
+          <DialogTitle>{modalTitle}</DialogTitle>
+          <DialogDescription>{t.stepModal.description}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <Label>Step Name</Label>
+            <Label>{t.stepModal.stepName}</Label>
             <Input value={local.name} onChange={(e) => update("name", e.target.value)} />
           </div>
           <div className="col-span-2">
-            <Label>Description</Label>
+            <Label>{t.stepModal.stepDesc}</Label>
             <Textarea value={local.description} onChange={(e) => update("description", e.target.value)} rows={2} />
           </div>
           <div>
-            <Label>Role</Label>
-            <Input value={local.role} onChange={(e) => update("role", e.target.value)} placeholder="e.g. AP Clerk" />
+            <Label>{t.stepModal.role}</Label>
+            <Input value={local.role} onChange={(e) => update("role", e.target.value)} placeholder={t.stepModal.rolePlaceholder} />
           </div>
           <div>
-            <Label>Tool Used</Label>
-            <Input value={local.toolUsed} onChange={(e) => update("toolUsed", e.target.value)} placeholder="e.g. SAP ERP" />
+            <Label>{t.stepModal.tool}</Label>
+            <Input value={local.toolUsed} onChange={(e) => update("toolUsed", e.target.value)} placeholder={t.stepModal.toolPlaceholder} />
           </div>
           <div>
-            <Label>Decision Type</Label>
+            <Label>{t.stepModal.decisionType}</Label>
             <Select value={local.decisionType || ""} onValueChange={(v) => update("decisionType", v || undefined)}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t.stepModal.selectDecision} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="manual_judgment">Manual Judgment</SelectItem>
-                <SelectItem value="rule_based">Rule-Based</SelectItem>
-                <SelectItem value="no_decision">No Decision</SelectItem>
+                <SelectItem value="manual_judgment">{t.stepModal.manualJudgment}</SelectItem>
+                <SelectItem value="rule_based">{t.stepModal.ruleBased}</SelectItem>
+                <SelectItem value="no_decision">{t.stepModal.noDecision}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Frequency</Label>
-            <Input value={local.frequency || ""} onChange={(e) => update("frequency", e.target.value)} placeholder="e.g. Per invoice, Daily" />
+            <Label>{t.stepModal.frequency}</Label>
+            <Input value={local.frequency || ""} onChange={(e) => update("frequency", e.target.value)} placeholder={t.stepModal.frequencyPlaceholder} />
           </div>
           <div>
-            <Label>Volume Estimate</Label>
-            <Input value={local.volumeEstimate || ""} onChange={(e) => update("volumeEstimate", e.target.value)} placeholder="e.g. ~200/month" />
+            <Label>{t.stepModal.volumeEstimate}</Label>
+            <Input value={local.volumeEstimate || ""} onChange={(e) => update("volumeEstimate", e.target.value)} placeholder={t.stepModal.volumePlaceholder} />
           </div>
           <div>
-            <Label>Data Inputs (comma-separated)</Label>
+            <Label>{t.stepModal.dataInputs}</Label>
             <Input
               value={(local.dataInputs || []).join(", ")}
               onChange={(e) => update("dataInputs", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-              placeholder="e.g. Invoice PDF, PO number"
+              placeholder={t.stepModal.dataInputsPlaceholder}
             />
           </div>
           <div className="col-span-2">
-            <Label>Data Outputs (comma-separated)</Label>
+            <Label>{t.stepModal.dataOutputs}</Label>
             <Input
               value={(local.dataOutputs || []).join(", ")}
               onChange={(e) => update("dataOutputs", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-              placeholder="e.g. SAP record, Validation flag"
+              placeholder={t.stepModal.dataOutputsPlaceholder}
             />
           </div>
           <div className="col-span-2">
-            <Label>Pain Points / Bottlenecks</Label>
-            <Textarea value={local.painPoints || ""} onChange={(e) => update("painPoints", e.target.value)} rows={2} placeholder="e.g. Takes 2 hours on average, Frequent data entry errors" />
+            <Label>{t.stepModal.painPoints}</Label>
+            <Textarea value={local.painPoints || ""} onChange={(e) => update("painPoints", e.target.value)} rows={2} placeholder={t.stepModal.painPointsPlaceholder} />
           </div>
           <div className="col-span-2">
-            <Label>Business Rules</Label>
-            <Textarea value={local.businessRules || ""} onChange={(e) => update("businessRules", e.target.value)} rows={2} placeholder="e.g. If amount > $5,000, escalate to manager" />
+            <Label>{t.stepModal.businessRules}</Label>
+            <Textarea value={local.businessRules || ""} onChange={(e) => update("businessRules", e.target.value)} rows={2} placeholder={t.stepModal.businessRulesPlaceholder} />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave(local)}>Save Step</Button>
+          <Button variant="outline" onClick={onClose}>{t.stepModal.cancel}</Button>
+          <Button onClick={() => onSave(local)}>{t.stepModal.save}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -2,18 +2,21 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Outlet, useLocation } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-const pageTitles: Record<string, string> = {
-  "/": "Overview",
-  "/knowledge-base": "Knowledge Base",
-  "/process-upload": "Process Upload",
-  "/process-analysis": "Process Analysis",
-  "/automation-discovery": "Automation Discovery",
-};
+import { useLang } from "@/lib/i18n";
 
 export function AppLayout() {
   const location = useLocation();
-  const title = pageTitles[location.pathname] || "Dashboard";
+  const { t } = useLang();
+
+  const pageTitles: Record<string, string> = {
+    "/": t.nav.overview,
+    "/knowledge-base": t.nav.knowledgeBase,
+    "/process-upload": t.nav.processUpload,
+    "/process-analysis": t.nav.processAnalysis,
+    "/automation-discovery": t.nav.automationDiscovery,
+  };
+
+  const title = pageTitles[location.pathname] || t.nav.overview;
 
   return (
     <SidebarProvider>
