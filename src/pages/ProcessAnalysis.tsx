@@ -1,16 +1,18 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus } from "lucide-react";
-import { mockProcesses, mockAnalyses, ProcessStep, ProcessContext } from "@/data/mockData";
+import { CheckCircle2, Plus, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { StepCard } from "@/components/process-analysis/StepCard";
 import { StepEditModal } from "@/components/process-analysis/StepEditModal";
 import { ProcessContextCard } from "@/components/process-analysis/ProcessContextCard";
 import { EditableBadges } from "@/components/process-analysis/EditableBadges";
 import { useLang } from "@/lib/i18n";
+import type { ProcessStep, ProcessContext } from "@/components/process-analysis/types";
 import {
   ReactFlow,
   Background,
@@ -25,8 +27,6 @@ import {
   Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-
-const analysisProcesses = mockProcesses.filter((p) => p.status === "analyzed" || p.status === "approved");
 
 function stepsToNodesEdges(steps: ProcessStep[]) {
   const nodes: Node[] = steps.map((s, i) => ({
@@ -56,72 +56,250 @@ function stepsToNodesEdges(steps: ProcessStep[]) {
 
 const ProcessAnalysis = () => {
   const { t } = useLang();
-  const [selectedProcessId, setSelectedProcessId] = useState(analysisProcesses[0]?.id || "");
-  const analysis = mockAnalyses[selectedProcessId];
-  const process = mockProcesses.find((p) => p.id === selectedProcessId);
+  const queryClient = useQueryClient();
+  const [selectedProcessId, setSelectedProcessId] = useState("");
 
-  const [steps, setSteps] = useState<ProcessStep[]>(analysis?.steps || []);
-  const [roles, setRoles] = useState<string[]>(analysis?.roles || []);
-  const [tools, setTools] = useState<string[]>(analysis?.toolsUsed || []);
-  const [context, setContext] = useState<ProcessContext>(analysis?.context || {});
-  const [approved, setApproved] = useState(process?.status === "approved");
+  // Fetch processes with status analyzed or approved
+  const { data: processes = [], isLoading: loadingProcesses } = useQuery({
+    queryKey: ["analysis-processes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("uploaded_processes")
+        .select("id, file_name, status")
+        .in("status", ["analyzed", "approved"])
+        .order("upload_date", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
 
+  // Auto-select first process
+  useEffect(() => {
+    if (processes.length > 0 && !selectedProcessId) {
+      setSelectedProcessId(processes[0].id);
+    }
+  }, [processes, selectedProcessId]);
+
+  const currentProcess = processes.find((p) => p.id === selectedProcessId);
+
+  // Fetch steps for selected process
+  const { data: steps = [], isLoading: loadingSteps } = useQuery({
+    queryKey: ["process-steps", selectedProcessId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("process_steps")
+        .select("*")
+        .eq("process_id", selectedProcessId)
+        .order("step_order");
+      if (error) throw error;
+      return data.map((s): ProcessStep => ({
+        id: s.id,
+        name: s.name,
+        description: s.description || "",
+        role: s.role || "",
+        toolUsed: s.tool_used || "",
+        decisionType: s.decision_type as ProcessStep["decisionType"],
+        dataInputs: s.data_inputs || [],
+        dataOutputs: s.data_outputs || [],
+        painPoints: s.pain_points || "",
+        businessRules: s.business_rules || "",
+        frequency: s.frequency || "",
+        volumeEstimate: s.volume_estimate || "",
+        stepOrder: s.step_order,
+      }));
+    },
+    enabled: !!selectedProcessId,
+  });
+
+  // Fetch context for selected process
+  const { data: context } = useQuery({
+    queryKey: ["process-context", selectedProcessId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("process_context")
+        .select("*")
+        .eq("process_id", selectedProcessId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return {
+        id: data.id,
+        processObjective: data.process_objective || "",
+        knownConstraints: data.known_constraints || "",
+        assumptions: data.assumptions || "",
+        painPointsSummary: data.pain_points_summary || "",
+        volumeAndFrequency: data.volume_and_frequency || "",
+        stakeholderNotes: data.stakeholder_notes || "",
+      } as ProcessContext;
+    },
+    enabled: !!selectedProcessId,
+  });
+
+  // Derive roles and tools from steps
+  const roles = useMemo(() => [...new Set(steps.map((s) => s.role).filter(Boolean))], [steps]);
+  const tools = useMemo(() => [...new Set(steps.map((s) => s.toolUsed).filter(Boolean))], [steps]);
+
+  // Flowchart
+  const initial = useMemo(() => stepsToNodesEdges(steps), [steps]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+  const onConnect = useCallback(
+    (params: Connection) => setEdges((eds) => addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
+    [setEdges]
+  );
+
+  useEffect(() => {
+    const { nodes: n, edges: e } = stepsToNodesEdges(steps);
+    setNodes(n);
+    setEdges(e);
+  }, [steps, setNodes, setEdges]);
+
+  // === Mutations ===
+
+  const updateStepMutation = useMutation({
+    mutationFn: async (step: ProcessStep) => {
+      const { error } = await supabase
+        .from("process_steps")
+        .update({
+          name: step.name,
+          description: step.description,
+          role: step.role,
+          tool_used: step.toolUsed,
+          decision_type: step.decisionType || null,
+          data_inputs: step.dataInputs?.length ? step.dataInputs : null,
+          data_outputs: step.dataOutputs?.length ? step.dataOutputs : null,
+          pain_points: step.painPoints || null,
+          business_rules: step.businessRules || null,
+          frequency: step.frequency || null,
+          volume_estimate: step.volumeEstimate || null,
+        })
+        .eq("id", step.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: t.analysis.stepUpdated });
+    },
+  });
+
+  const addStepMutation = useMutation({
+    mutationFn: async (step: ProcessStep) => {
+      const { error } = await supabase.from("process_steps").insert({
+        process_id: selectedProcessId,
+        step_order: steps.length,
+        name: step.name,
+        description: step.description,
+        role: step.role,
+        tool_used: step.toolUsed,
+        decision_type: step.decisionType || null,
+        data_inputs: step.dataInputs?.length ? step.dataInputs : null,
+        data_outputs: step.dataOutputs?.length ? step.dataOutputs : null,
+        pain_points: step.painPoints || null,
+        business_rules: step.businessRules || null,
+        frequency: step.frequency || null,
+        volume_estimate: step.volumeEstimate || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: t.analysis.stepAdded });
+    },
+  });
+
+  const deleteStepMutation = useMutation({
+    mutationFn: async (stepId: string) => {
+      const { error } = await supabase.from("process_steps").delete().eq("id", stepId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: t.analysis.stepRemoved });
+    },
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: async ({ index, direction }: { index: number; direction: -1 | 1 }) => {
+      const target = index + direction;
+      const stepA = steps[index];
+      const stepB = steps[target];
+      // Swap step_order values
+      const { error: e1 } = await supabase.from("process_steps").update({ step_order: stepB.stepOrder }).eq("id", stepA.id);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from("process_steps").update({ step_order: stepA.stepOrder }).eq("id", stepB.id);
+      if (e2) throw e2;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+    },
+  });
+
+  const updateContextMutation = useMutation({
+    mutationFn: async (ctx: ProcessContext) => {
+      const payload = {
+        process_objective: ctx.processObjective || null,
+        known_constraints: ctx.knownConstraints || null,
+        assumptions: ctx.assumptions || null,
+        pain_points_summary: ctx.painPointsSummary || null,
+        volume_and_frequency: ctx.volumeAndFrequency || null,
+        stakeholder_notes: ctx.stakeholderNotes || null,
+      };
+      if (ctx.id) {
+        const { error } = await supabase.from("process_context").update(payload).eq("id", ctx.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("process_context").insert({ ...payload, process_id: selectedProcessId });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-context", selectedProcessId] });
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("uploaded_processes")
+        .update({ status: "approved" })
+        .eq("id", selectedProcessId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["analysis-processes"] });
+      toast({ title: t.analysis.processApproved, description: t.analysis.discoveryAvailable });
+    },
+  });
+
+  // Local UI state
   const [editingStep, setEditingStep] = useState<ProcessStep | null>(null);
   const [isAdding, setIsAdding] = useState(false);
 
-  const initial = useMemo(() => stepsToNodesEdges(steps), []);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
-  const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, eds)), [setEdges]);
-
-  const syncFlowchart = (newSteps: ProcessStep[]) => {
-    const { nodes: n, edges: e } = stepsToNodesEdges(newSteps);
-    setNodes(n);
-    setEdges(e);
-  };
-
-  const handleSelectProcess = (id: string) => {
-    setSelectedProcessId(id);
-    const a = mockAnalyses[id];
-    const p = mockProcesses.find((pr) => pr.id === id);
-    setSteps(a?.steps || []);
-    setRoles(a?.roles || []);
-    setTools(a?.toolsUsed || []);
-    setContext(a?.context || {});
-    setApproved(p?.status === "approved");
-    if (a) syncFlowchart(a.steps);
-  };
-
   const handleSaveStep = (step: ProcessStep) => {
-    const newSteps = steps.map((s) => (s.id === step.id ? step : s));
-    setSteps(newSteps);
-    syncFlowchart(newSteps);
+    updateStepMutation.mutate(step);
     setEditingStep(null);
-    toast({ title: t.analysis.stepUpdated });
   };
 
   const handleAddStep = (step: ProcessStep) => {
-    const newSteps = [...steps, step];
-    setSteps(newSteps);
-    syncFlowchart(newSteps);
+    addStepMutation.mutate(step);
     setIsAdding(false);
-    toast({ title: t.analysis.stepAdded });
   };
 
   const handleDeleteStep = (stepId: string) => {
-    const newSteps = steps.filter((s) => s.id !== stepId);
-    setSteps(newSteps);
-    syncFlowchart(newSteps);
-    toast({ title: t.analysis.stepRemoved });
+    deleteStepMutation.mutate(stepId);
   };
 
   const handleMoveStep = (index: number, direction: -1 | 1) => {
-    const newSteps = [...steps];
-    const target = index + direction;
-    [newSteps[index], newSteps[target]] = [newSteps[target], newSteps[index]];
-    setSteps(newSteps);
-    syncFlowchart(newSteps);
+    reorderMutation.mutate({ index, direction });
   };
+
+  // Debounced context save
+  const handleContextChange = useCallback(
+    (newCtx: ProcessContext) => {
+      updateContextMutation.mutate(newCtx);
+    },
+    [updateContextMutation]
+  );
 
   const newStepTemplate: ProcessStep = {
     id: `s-new-${Date.now()}`,
@@ -131,7 +309,17 @@ const ProcessAnalysis = () => {
     toolUsed: "",
   };
 
-  if (!analysis) {
+  const approved = currentProcess?.status === "approved";
+
+  if (loadingProcesses) {
+    return (
+      <div className="max-w-5xl flex items-center justify-center p-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (processes.length === 0) {
     return (
       <div className="max-w-5xl">
         <Card className="p-12 text-center">
@@ -145,10 +333,10 @@ const ProcessAnalysis = () => {
     <div className="max-w-6xl space-y-6 pb-24">
       {/* Process Selector */}
       <div className="flex items-center gap-4">
-        <Select value={selectedProcessId} onValueChange={handleSelectProcess}>
+        <Select value={selectedProcessId} onValueChange={setSelectedProcessId}>
           <SelectTrigger className="w-[300px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {analysisProcesses.map((p) => <SelectItem key={p.id} value={p.id}>{p.fileName}</SelectItem>)}
+            {processes.map((p) => <SelectItem key={p.id} value={p.id}>{p.file_name}</SelectItem>)}
           </SelectContent>
         </Select>
         {approved && <Badge className="bg-green-100 text-green-800">{t.analysis.approved}</Badge>}
@@ -160,32 +348,40 @@ const ProcessAnalysis = () => {
           <CardTitle className="text-base">{t.analysis.title}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {steps.map((step, i) => (
-            <StepCard
-              key={step.id}
-              step={step}
-              index={i}
-              total={steps.length}
-              onEdit={setEditingStep}
-              onDelete={handleDeleteStep}
-              onMoveUp={(idx) => handleMoveStep(idx, -1)}
-              onMoveDown={(idx) => handleMoveStep(idx, 1)}
-            />
-          ))}
-          <Button variant="outline" className="w-full" onClick={() => setIsAdding(true)}>
-            <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
-          </Button>
+          {loadingSteps ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {steps.map((step, i) => (
+                <StepCard
+                  key={step.id}
+                  step={step}
+                  index={i}
+                  total={steps.length}
+                  onEdit={setEditingStep}
+                  onDelete={handleDeleteStep}
+                  onMoveUp={(idx) => handleMoveStep(idx, -1)}
+                  onMoveDown={(idx) => handleMoveStep(idx, 1)}
+                />
+              ))}
+              <Button variant="outline" className="w-full" onClick={() => setIsAdding(true)}>
+                <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
+              </Button>
 
-          {/* Roles & Tools */}
-          <div className="flex flex-wrap gap-6 pt-3 border-t">
-            <EditableBadges label={t.analysis.roles} items={roles} onChange={setRoles} variant="secondary" />
-            <EditableBadges label={t.analysis.tools} items={tools} onChange={setTools} variant="outline" />
-          </div>
+              {/* Roles & Tools (read-only derived from steps) */}
+              <div className="flex flex-wrap gap-6 pt-3 border-t">
+                <EditableBadges label={t.analysis.roles} items={roles} onChange={() => {}} variant="secondary" />
+                <EditableBadges label={t.analysis.tools} items={tools} onChange={() => {}} variant="outline" />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
       {/* Process-Level Context */}
-      <ProcessContextCard context={context} onChange={setContext} />
+      <ProcessContextCard context={context || {}} onChange={handleContextChange} />
 
       {/* Flowchart */}
       <Card>
@@ -235,13 +431,14 @@ const ProcessAnalysis = () => {
             <p className="text-xs text-muted-foreground">{t.analysis.approveSubtitle}</p>
           </div>
           <Button
-            disabled={steps.length === 0 || approved}
-            onClick={() => {
-              setApproved(true);
-              toast({ title: t.analysis.processApproved, description: t.analysis.discoveryAvailable });
-            }}
+            disabled={steps.length === 0 || approved || approveMutation.isPending}
+            onClick={() => approveMutation.mutate()}
           >
-            <CheckCircle2 className="h-4 w-4 mr-1" />
+            {approveMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+            )}
             {approved ? t.analysis.approved : t.analysis.approve}
           </Button>
         </div>

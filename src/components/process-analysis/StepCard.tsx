@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Edit2, Trash2, ChevronUp, ChevronDown } from "lucide-react";
-import { ProcessStep } from "@/data/mockData";
+import type { ProcessStep } from "./types";
 
 interface StepCardProps {
   step: ProcessStep;
@@ -30,8 +30,8 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
             <div className="font-medium text-sm">{step.name}</div>
             <div className="text-xs text-muted-foreground">{step.description}</div>
             <div className="flex flex-wrap gap-1.5 pt-1">
-              <Badge variant="secondary" className="text-[10px]">{step.role}</Badge>
-              <Badge variant="outline" className="text-[10px]">{step.toolUsed}</Badge>
+              {step.role && <Badge variant="secondary" className="text-[10px]">{step.role}</Badge>}
+              {step.toolUsed && <Badge variant="outline" className="text-[10px]">{step.toolUsed}</Badge>}
               {step.decisionType && (
                 <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
                   {decisionLabels[step.decisionType]}
