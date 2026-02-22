@@ -1,7 +1,8 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ProcessContext } from "@/data/mockData";
+import type { ProcessContext } from "./types";
 import { useLang } from "@/lib/i18n";
 
 interface ProcessContextCardProps {
@@ -11,9 +12,18 @@ interface ProcessContextCardProps {
 
 export const ProcessContextCard = ({ context, onChange }: ProcessContextCardProps) => {
   const { t } = useLang();
+  const [local, setLocal] = useState<ProcessContext>(context);
+
+  useEffect(() => {
+    setLocal(context);
+  }, [context]);
 
   const update = (field: keyof ProcessContext, value: string) => {
-    onChange({ ...context, [field]: value });
+    setLocal((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const save = () => {
+    onChange(local);
   };
 
   const fields: { key: keyof ProcessContext; label: string; placeholder: string }[] = [
@@ -35,8 +45,9 @@ export const ProcessContextCard = ({ context, onChange }: ProcessContextCardProp
           <div key={key} className={key === "stakeholderNotes" ? "col-span-2" : ""}>
             <Label className="text-xs">{label}</Label>
             <Textarea
-              value={context[key] || ""}
+              value={(local[key] as string) || ""}
               onChange={(e) => update(key, e.target.value)}
+              onBlur={save}
               placeholder={placeholder}
               rows={2}
               className="mt-1 text-sm"
