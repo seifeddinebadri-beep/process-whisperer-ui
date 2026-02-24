@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List } from "lucide-react";
+import { LayoutGrid, List, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { mockUseCases, mockProcesses } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useLang } from "@/lib/i18n";
 
-const potentialColors: Record<string, string> = {
+const impactColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
   medium: "bg-amber-100 text-amber-800",
   high: "bg-green-100 text-green-800",
@@ -17,9 +18,28 @@ const potentialColors: Record<string, string> = {
 const AutomationDiscovery = () => {
   const navigate = useNavigate();
   const { t } = useLang();
-  const approvedProcesses = mockProcesses.filter((p) => p.status === "approved" || p.status === "discovered");
 
-  if (approvedProcesses.length === 0) {
+  const { data: useCases, isLoading } = useQuery({
+    queryKey: ["automation-use-cases"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("automation_use_cases")
+        .select("*, uploaded_processes(file_name, status)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl flex justify-center p-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!useCases || useCases.length === 0) {
     return (
       <div className="max-w-5xl">
         <Card className="p-12 text-center">
@@ -44,16 +64,30 @@ const AutomationDiscovery = () => {
 
         <TabsContent value="cards" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            {mockUseCases.map((uc) => (
+            {useCases.map((uc) => (
               <Card key={uc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-sm font-medium">{uc.name}</CardTitle>
-                    <Badge className={`text-xs capitalize ${potentialColors[uc.potential]}`}>{t.discovery[uc.potential as "low"|"medium"|"high"]}</Badge>
+                    <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
+                    <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
+                      {t.discovery[(uc.impact || "medium") as "low" | "medium" | "high"]}
+                    </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{uc.description}</p>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-2">
+                  <div className="flex flex-wrap gap-1">
+                    {uc.complexity && (
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {t.discovery.complexity || "Complexité"}: {uc.complexity}
+                      </Badge>
+                    )}
+                    {uc.roi_estimate && (
+                      <Badge variant="outline" className="text-xs">
+                        ROI: {uc.roi_estimate}
+                      </Badge>
+                    )}
+                  </div>
                   <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">{t.discovery.viewDetails}</Button>
                 </CardContent>
               </Card>
@@ -70,15 +104,23 @@ const AutomationDiscovery = () => {
                     <TableHead>{t.discovery.useCase}</TableHead>
                     <TableHead>{t.discovery.description}</TableHead>
                     <TableHead>{t.discovery.potential}</TableHead>
+                    <TableHead>Complexité</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockUseCases.map((uc) => (
+                  {useCases.map((uc) => (
                     <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
-                      <TableCell className="font-medium text-sm">{uc.name}</TableCell>
+                      <TableCell className="font-medium text-sm">{uc.title}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{uc.description}</TableCell>
-                      <TableCell><Badge className={`text-xs capitalize ${potentialColors[uc.potential]}`}>{t.discovery[uc.potential as "low"|"medium"|"high"]}</Badge></TableCell>
+                      <TableCell>
+                        <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
+                          {t.discovery[(uc.impact || "medium") as "low" | "medium" | "high"]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs capitalize">{uc.complexity || "—"}</Badge>
+                      </TableCell>
                       <TableCell><Button variant="ghost" size="sm" className="text-xs">{t.discovery.details}</Button></TableCell>
                     </TableRow>
                   ))}
