@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.generate-embeddings]
 verify_jwt = false
+
+[functions.rag-query]
+verify_jwt = false
+
+[functions.analyze-process]
+verify_jwt = false
