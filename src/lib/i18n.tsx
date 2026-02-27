@@ -259,6 +259,16 @@ export const translations = {
       notFound: "Cas d'usage introuvable.",
     },
 
+    // Clarification Panel
+    clarification: {
+      title: "Agent de clarification IA",
+      subtitle: "Questions de challenge pour enrichir le contexte avant la découverte",
+      answerPlaceholder: "Votre réponse...",
+      apply: "Appliquer au contexte",
+      applyHint: "Les réponses seront fusionnées dans le contexte du processus.",
+      openPanel: "Clarification IA",
+    },
+
     // Language switcher
     language: "Langue",
     switchToFr: "Français",
@@ -509,6 +519,15 @@ export const translations = {
       tools: "Tools",
       businessRules: "Business Rules",
       notFound: "Use case not found.",
+    },
+
+    clarification: {
+      title: "AI Clarification Agent",
+      subtitle: "Challenge questions to enrich context before discovery",
+      answerPlaceholder: "Your answer...",
+      apply: "Apply to Context",
+      applyHint: "Answers will be merged into the process context.",
+      openPanel: "AI Clarification",
     },
 
     language: "Language",

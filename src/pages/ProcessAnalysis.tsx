@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2 } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -12,6 +12,7 @@ import { StepEditModal } from "@/components/process-analysis/StepEditModal";
 import { ProcessContextCard } from "@/components/process-analysis/ProcessContextCard";
 import { EditableBadges } from "@/components/process-analysis/EditableBadges";
 import { useLang } from "@/lib/i18n";
+import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
 import type { ProcessStep, ProcessContext } from "@/components/process-analysis/types";
 import {
   ReactFlow,
@@ -274,6 +275,23 @@ const ProcessAnalysis = () => {
   // Local UI state
   const [editingStep, setEditingStep] = useState<ProcessStep | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [clarificationOpen, setClarificationOpen] = useState(false);
+
+  const handleClarificationApply = (updates: Partial<ProcessContext>) => {
+    const merged: ProcessContext = {
+      ...context,
+      ...Object.fromEntries(
+        Object.entries(updates).map(([k, v]) => {
+          const existing = (context as any)?.[k];
+          return [k, existing ? `${existing}\n\n---\n\n${v}` : v];
+        })
+      ),
+    };
+    updateContextMutation.mutate(merged);
+    toast({ title: lang === "fr" ? "Contexte enrichi par l'agent IA" : "Context enriched by AI agent" });
+  };
+
+  const { lang } = useLang();
 
   const handleSaveStep = (step: ProcessStep) => {
     updateStepMutation.mutate(step);
@@ -340,6 +358,15 @@ const ProcessAnalysis = () => {
           </SelectContent>
         </Select>
         {approved && <Badge className="bg-green-100 text-green-800">{t.analysis.approved}</Badge>}
+        <Button
+          variant="outline"
+          onClick={() => setClarificationOpen(true)}
+          disabled={steps.length === 0}
+          className="ml-auto"
+        >
+          <Bot className="h-4 w-4 mr-1" />
+          {t.clarification.openPanel}
+        </Button>
       </div>
 
       {/* Editable As-Is Steps */}
@@ -421,6 +448,14 @@ const ProcessAnalysis = () => {
         open={isAdding}
         onClose={() => setIsAdding(false)}
         onSave={handleAddStep}
+      />
+
+      {/* Clarification Panel */}
+      <ClarificationPanel
+        open={clarificationOpen}
+        onOpenChange={setClarificationOpen}
+        processId={selectedProcessId}
+        onApplyToContext={handleClarificationApply}
       />
 
       {/* Sticky Approve Bar */}
