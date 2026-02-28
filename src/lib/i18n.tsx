@@ -267,6 +267,9 @@ export const translations = {
       apply: "Appliquer au contexte",
       applyHint: "Les réponses seront fusionnées dans le contexte du processus.",
       openPanel: "Clarification IA",
+      other: "Autre",
+      otherPlaceholder: "Saisissez votre propre réponse...",
+      selectAnswer: "Sélectionnez une réponse",
     },
 
     // Language switcher
@@ -528,6 +531,9 @@ export const translations = {
       apply: "Apply to Context",
       applyHint: "Answers will be merged into the process context.",
       openPanel: "AI Clarification",
+      other: "Other",
+      otherPlaceholder: "Type your own answer...",
+      selectAnswer: "Select an answer",
     },
 
     language: "Language",
