@@ -272,6 +272,21 @@ export const translations = {
       selectAnswer: "Sélectionnez une réponse",
     },
 
+    comparison: {
+      title: "Comparaison des sources d'étapes",
+      subtitle: "Examinez les étapes des deux sources, acceptez ou ignorez chacune, puis fusionnez.",
+      eventLog: "Journal d'événements",
+      knowledgeBase: "Base de connaissances",
+      accept: "Accepter",
+      skip: "Ignorer",
+      mergeSelected: "Fusionner les étapes sélectionnées",
+      stepsSelected: "étapes sélectionnées",
+      decided: "décidées",
+      accepted: "acceptées",
+      showComparison: "Comparer les sources",
+      showMerged: "Vue fusionnée",
+    },
+
     // Language switcher
     language: "Langue",
     switchToFr: "Français",
@@ -534,6 +549,21 @@ export const translations = {
       other: "Other",
       otherPlaceholder: "Type your own answer...",
       selectAnswer: "Select an answer",
+    },
+
+    comparison: {
+      title: "Step Source Comparison",
+      subtitle: "Review steps from both sources, accept or skip each one, then merge.",
+      eventLog: "Event Log",
+      knowledgeBase: "Knowledge Base",
+      accept: "Accept",
+      skip: "Skip",
+      mergeSelected: "Merge Selected Steps",
+      stepsSelected: "steps selected",
+      decided: "decided",
+      accepted: "accepted",
+      showComparison: "Compare Sources",
+      showMerged: "Merged View",
     },
 
     language: "Language",

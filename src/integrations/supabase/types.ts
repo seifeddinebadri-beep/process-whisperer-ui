@@ -294,6 +294,7 @@ export type Database = {
           pain_points: string | null
           process_id: string
           role: string | null
+          source: string
           step_order: number
           tool_used: string | null
           volume_estimate: string | null
@@ -310,6 +311,7 @@ export type Database = {
           pain_points?: string | null
           process_id: string
           role?: string | null
+          source?: string
           step_order?: number
           tool_used?: string | null
           volume_estimate?: string | null
@@ -326,6 +328,7 @@ export type Database = {
           pain_points?: string | null
           process_id?: string
           role?: string | null
+          source?: string
           step_order?: number
           tool_used?: string | null
           volume_estimate?: string | null
