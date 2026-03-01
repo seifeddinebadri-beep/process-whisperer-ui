@@ -1,0 +1,1 @@
+ALTER TABLE public.process_steps ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';

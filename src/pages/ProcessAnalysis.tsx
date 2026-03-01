@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -11,9 +11,11 @@ import { StepCard } from "@/components/process-analysis/StepCard";
 import { StepEditModal } from "@/components/process-analysis/StepEditModal";
 import { ProcessContextCard } from "@/components/process-analysis/ProcessContextCard";
 import { EditableBadges } from "@/components/process-analysis/EditableBadges";
+import { StepComparisonView } from "@/components/process-analysis/StepComparisonView";
 import { useLang } from "@/lib/i18n";
 import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
 import type { ProcessStep, ProcessContext } from "@/components/process-analysis/types";
+import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import {
   ReactFlow,
   Background,
@@ -107,6 +109,7 @@ const ProcessAnalysis = () => {
         frequency: s.frequency || "",
         volumeEstimate: s.volume_estimate || "",
         stepOrder: s.step_order,
+        source: (s as any).source || "manual",
       }));
     },
     enabled: !!selectedProcessId,
@@ -276,6 +279,7 @@ const ProcessAnalysis = () => {
   const [editingStep, setEditingStep] = useState<ProcessStep | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [clarificationOpen, setClarificationOpen] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
   const handleClarificationApply = (updates: Partial<ProcessContext>) => {
     const merged: ProcessContext = {
@@ -359,6 +363,15 @@ const ProcessAnalysis = () => {
         </Select>
         {approved && <Badge className="bg-green-100 text-green-800">{t.analysis.approved}</Badge>}
         <Button
+          variant={showComparison ? "default" : "outline"}
+          onClick={() => setShowComparison(!showComparison)}
+          disabled={steps.length === 0}
+          size="sm"
+        >
+          <GitCompare className="h-4 w-4 mr-1" />
+          {showComparison ? (t.comparison?.showMerged || "Merged View") : (t.comparison?.showComparison || "Compare Sources")}
+        </Button>
+        <Button
           variant="outline"
           onClick={() => setClarificationOpen(true)}
           disabled={steps.length === 0}
@@ -369,43 +382,56 @@ const ProcessAnalysis = () => {
         </Button>
       </div>
 
-      {/* Editable As-Is Steps */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t.analysis.title}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {loadingSteps ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              {steps.map((step, i) => (
-                <StepCard
-                  key={step.id}
-                  step={step}
-                  index={i}
-                  total={steps.length}
-                  onEdit={setEditingStep}
-                  onDelete={handleDeleteStep}
-                  onMoveUp={(idx) => handleMoveStep(idx, -1)}
-                  onMoveDown={(idx) => handleMoveStep(idx, 1)}
-                />
-              ))}
-              <Button variant="outline" className="w-full" onClick={() => setIsAdding(true)}>
-                <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
-              </Button>
-
-              {/* Roles & Tools (read-only derived from steps) */}
-              <div className="flex flex-wrap gap-6 pt-3 border-t">
-                <EditableBadges label={t.analysis.roles} items={roles} onChange={() => {}} variant="secondary" />
-                <EditableBadges label={t.analysis.tools} items={tools} onChange={() => {}} variant="outline" />
+      {/* Comparison View or Normal Steps */}
+      {showComparison ? (
+        <StepComparisonView
+          eventLogSteps={mockEventLogSteps}
+          kbSteps={mockKBSteps}
+          onMergeComplete={(mergedSteps) => {
+            // For now, just log and switch back to normal view
+            console.log("Merged steps:", mergedSteps);
+            setShowComparison(false);
+            toast({ title: lang === "fr" ? "Étapes fusionnées avec succès" : "Steps merged successfully" });
+          }}
+        />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t.analysis.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {loadingSteps ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            ) : (
+              <>
+                {steps.map((step, i) => (
+                  <StepCard
+                    key={step.id}
+                    step={step}
+                    index={i}
+                    total={steps.length}
+                    onEdit={setEditingStep}
+                    onDelete={handleDeleteStep}
+                    onMoveUp={(idx) => handleMoveStep(idx, -1)}
+                    onMoveDown={(idx) => handleMoveStep(idx, 1)}
+                  />
+                ))}
+                <Button variant="outline" className="w-full" onClick={() => setIsAdding(true)}>
+                  <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
+                </Button>
+
+                {/* Roles & Tools (read-only derived from steps) */}
+                <div className="flex flex-wrap gap-6 pt-3 border-t">
+                  <EditableBadges label={t.analysis.roles} items={roles} onChange={() => {}} variant="secondary" />
+                  <EditableBadges label={t.analysis.tools} items={tools} onChange={() => {}} variant="outline" />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Process-Level Context */}
       <ProcessContextCard context={context || {}} onChange={handleContextChange} />

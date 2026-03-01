@@ -1,5 +1,7 @@
 // Shared types for process analysis components (maps DB columns to frontend)
 
+export type StepSource = "event_log" | "knowledge_base" | "manual" | "merged";
+
 export interface ProcessStep {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export interface ProcessStep {
   frequency?: string;
   volumeEstimate?: string;
   stepOrder?: number;
+  source?: StepSource;
 }
 
 export interface ProcessContext {
