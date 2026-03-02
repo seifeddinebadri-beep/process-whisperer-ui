@@ -16,46 +16,7 @@ import { useLang } from "@/lib/i18n";
 import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
 import type { ProcessStep, ProcessContext } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-  Connection,
-  MarkerType,
-  Node,
-  Edge,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-
-function stepsToNodesEdges(steps: ProcessStep[]) {
-  const nodes: Node[] = steps.map((s, i) => ({
-    id: s.id,
-    position: { x: 250, y: i * 120 },
-    data: { label: s.name },
-    style: {
-      padding: "12px 20px",
-      borderRadius: 8,
-      border: "1px solid hsl(214.3, 31.8%, 91.4%)",
-      background: "white",
-      fontSize: 13,
-      fontWeight: 500,
-      minWidth: 180,
-      textAlign: "center" as const,
-    },
-  }));
-  const edges: Edge[] = steps.slice(0, -1).map((s, i) => ({
-    id: `e-${s.id}-${steps[i + 1].id}`,
-    source: s.id,
-    target: steps[i + 1].id,
-    markerEnd: { type: MarkerType.ArrowClosed },
-    style: { stroke: "hsl(215.4, 16.3%, 46.9%)" },
-  }));
-  return { nodes, edges };
-}
+import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 
 const ProcessAnalysis = () => {
   const { t } = useLang();
@@ -143,20 +104,8 @@ const ProcessAnalysis = () => {
   const roles = useMemo(() => [...new Set(steps.map((s) => s.role).filter(Boolean))], [steps]);
   const tools = useMemo(() => [...new Set(steps.map((s) => s.toolUsed).filter(Boolean))], [steps]);
 
-  // Flowchart
-  const initial = useMemo(() => stepsToNodesEdges(steps), [steps]);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
-  const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
-    [setEdges]
-  );
 
-  useEffect(() => {
-    const { nodes: n, edges: e } = stepsToNodesEdges(steps);
-    setNodes(n);
-    setEdges(e);
-  }, [steps, setNodes, setEdges]);
+
 
   // === Mutations ===
 
@@ -436,27 +385,13 @@ const ProcessAnalysis = () => {
       {/* Process-Level Context */}
       <ProcessContextCard context={context || {}} onChange={handleContextChange} />
 
-      {/* Flowchart */}
+      {/* BPMN Flow */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t.analysis.flowchart}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[500px] rounded-lg border bg-muted/20">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              fitView
-              className="bg-muted/10"
-            >
-              <Background color="hsl(214.3, 31.8%, 91.4%)" gap={20} />
-              <Controls />
-              <MiniMap />
-            </ReactFlow>
-          </div>
+          <BpmnFlowView steps={steps} />
         </CardContent>
       </Card>
 
