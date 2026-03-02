@@ -1,65 +1,54 @@
 
 
-## Plan: Step Source Highlighting and Dual-Source Comparison/Merge
+## Plan: Refonte UX de la vue de fusion des étapes
 
-### Problem
-Currently, when steps are generated from the event log, there's no way to know which steps came from the event log analysis vs. the Knowledge Base context. The user wants to see both sources side by side and merge them step by step.
+### Problème actuel
+La vue de comparaison est trop basique : deux colonnes côte-à-côte avec de simples boutons Accept/Skip. Pas de contexte sur les différences, pas de gestion des exceptions (étapes similaires entre sources, étapes conflictuelles, étapes uniques à une source), et pas de prévisualisation du résultat fusionné.
 
-### Architecture
+### Nouvelle architecture UX
 
 ```text
-ProcessAnalysis page
-├── Process Selector (existing)
-├── Source Toggle: "Event Log" | "Knowledge Base" | "Merged" (new)
-├── Comparison View (new, when not yet merged)
-│   ├── Left column: Event Log steps (auto-generated)
-│   ├── Right column: KB steps (auto-generated from activity context)
-│   └── Per-step actions: Accept Left / Accept Right / Merge Both
-├── Merged Steps List (existing, enhanced with source badges)
-└── Approve Bar (existing)
+StepComparisonView (refonte complète)
+├── Header avec stats et légende des couleurs
+├── Section 1 : Étapes similaires (auto-détectées par nom/description)
+│   └── Ligne par paire : EL à gauche, KB à droite, bouton "Garder EL / Garder KB / Fusionner"
+├── Section 2 : Étapes uniques Event Log (pas d'équivalent KB)
+│   └── Chaque étape avec Accept/Skip
+├── Section 3 : Étapes uniques KB (pas d'équivalent EL)
+│   └── Chaque étape avec Accept/Skip
+├── Section 4 : Prévisualisation du résultat fusionné (live)
+│   └── Liste ordonnée des étapes acceptées avec badges source
+└── Footer : barre de progression + bouton "Valider la fusion"
 ```
 
-### Implementation Steps
+### Implémentation
 
-**1. Add `source` column to `process_steps` table**
-- New column: `source TEXT DEFAULT 'manual'` with values: `event_log`, `knowledge_base`, `manual`, `merged`
-- Migration only, no breaking change (existing steps default to `manual`)
+1. **Algorithme de matching des étapes similaires**
+   - Comparaison par mots-clés dans `name` et `description` (simple similarity basée sur mots communs)
+   - Classement en 3 catégories : `paired` (similaires), `uniqueEL` (event log only), `uniqueKB` (KB only)
+   - Mock data : enrichir les données pour illustrer les 3 cas
 
-**2. Update `parse-document` edge function to tag steps with source**
-- When generating steps from the uploaded file, set `source = 'event_log'`
-- Add a second AI call that generates steps from KB context (activity description, business objective, tools) and inserts them with `source = 'knowledge_base'`
-- Both sets are stored in `process_steps` with the same `process_id`
+2. **Refonte `StepComparisonView.tsx`**
+   - **Paired steps** : affichage côte-à-côte avec highlight des différences (champs qui diffèrent en orange). Actions : "Garder gauche", "Garder droite", ou "Combiner" (prend le meilleur des deux : description la plus longue, union des pain points, etc.)
+   - **Unique steps** : affichage en pleine largeur avec Accept/Skip
+   - **Live preview** : section en bas qui montre le résultat en temps réel avec numérotation et badges source
+   - **Progress bar** : pourcentage de décisions prises
+   - **Gestion des exceptions** : 
+     - Étapes avec `businessRules` conflictuelles → warning icon + tooltip
+     - Étapes avec `decisionType` différent → highlight orange
+     - Étapes sans description → badge "Incomplet"
 
-**3. Create `StepComparisonView` component**
-- Two-column layout showing event log steps on the left, KB steps on the right
-- Each step card shows a colored source badge (blue for event log, green for KB)
-- Per-step actions: "Accept" (keeps step as-is), "Skip" (removes it), "Merge" (opens modal to combine two steps)
-- "Accept All & Merge" button at the bottom to finalize
+3. **Enrichir les mock data** (`mockComparisonSteps.ts`)
+   - Ajouter des étapes qui matchent entre EL et KB (réception facture ↔ collecte factures)
+   - Ajouter une étape KB sans équivalent EL (vérification conformité)
+   - Ajouter une étape EL sans équivalent KB (paiement)
 
-**4. Update `StepCard` to show source badge**
-- Add optional `source` prop to `ProcessStep` type
-- Display a small colored badge: "Event Log" (blue), "KB" (green), "Manual" (gray), "Merged" (purple)
+4. **Nouvelles traductions i18n**
+   - Sections : "Étapes similaires", "Uniques Event Log", "Uniques KB", "Aperçu du résultat"
+   - Actions : "Garder", "Combiner", "Incomplet", "Conflit détecté"
 
-**5. Update `ProcessAnalysis` page**
-- When a process has steps from multiple sources (event_log + knowledge_base), show the comparison view instead of the flat list
-- After merging, switch to the normal step list view with source badges visible
-- Add a "Regenerate from KB" button to re-trigger KB step generation
-
-**6. Update i18n translations**
-- Add labels for source badges, comparison view headers, merge actions
-
-### Files to Create/Edit
-- `supabase/migrations/` — add `source` column to `process_steps`
-- `src/components/process-analysis/types.ts` — add `source` field
-- `src/components/process-analysis/StepCard.tsx` — add source badge
-- `src/components/process-analysis/StepComparisonView.tsx` (new) — dual-column merge UI
-- `src/pages/ProcessAnalysis.tsx` — integrate comparison view, source-aware logic
-- `supabase/functions/parse-document/index.ts` — tag generated steps with `source`
-- `src/lib/i18n.tsx` — add translations
-- `src/data/mockClarificationData.ts` or new mock file — mock dual-source steps for UX testing
-
-### Mock-First Approach
-- The comparison view will work with mock data first (hardcoded event_log and KB steps)
-- The `parse-document` changes can be wired later
-- Source badges on `StepCard` work immediately with the new field
+### Fichiers à modifier
+- `src/components/process-analysis/StepComparisonView.tsx` — refonte complète
+- `src/data/mockComparisonSteps.ts` — enrichir pour couvrir les 3 cas
+- `src/lib/i18n.tsx` — nouvelles traductions
 
