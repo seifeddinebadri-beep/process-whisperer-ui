@@ -17,6 +17,7 @@ import { ClarificationPanel } from "@/components/process-analysis/ClarificationP
 import type { ProcessStep, ProcessContext } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
+import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
 
 const ProcessAnalysis = () => {
   const { t } = useLang();
@@ -100,9 +101,13 @@ const ProcessAnalysis = () => {
     enabled: !!selectedProcessId,
   });
 
-  // Derive roles and tools from steps
-  const roles = useMemo(() => [...new Set(steps.map((s) => s.role).filter(Boolean))], [steps]);
-  const tools = useMemo(() => [...new Set(steps.map((s) => s.toolUsed).filter(Boolean))], [steps]);
+  // Use mock data as fallback when DB steps are empty
+  const displaySteps = steps.length > 0 ? steps : mockProcessSteps;
+  const displayContext = context || mockProcessContext;
+
+  // Derive roles and tools from display steps
+  const roles = useMemo(() => [...new Set(displaySteps.map((s) => s.role).filter(Boolean))], [displaySteps]);
+  const tools = useMemo(() => [...new Set(displaySteps.map((s) => s.toolUsed).filter(Boolean))], [displaySteps]);
 
 
 
@@ -323,7 +328,7 @@ const ProcessAnalysis = () => {
         <Button
           variant="outline"
           onClick={() => setClarificationOpen(true)}
-          disabled={steps.length === 0}
+          disabled={displaySteps.length === 0}
           className="ml-auto"
         >
           <Bot className="h-4 w-4 mr-1" />
@@ -355,12 +360,12 @@ const ProcessAnalysis = () => {
               </div>
             ) : (
               <>
-                {steps.map((step, i) => (
+                {displaySteps.map((step, i) => (
                   <StepCard
                     key={step.id}
                     step={step}
                     index={i}
-                    total={steps.length}
+                    total={displaySteps.length}
                     onEdit={setEditingStep}
                     onDelete={handleDeleteStep}
                     onMoveUp={(idx) => handleMoveStep(idx, -1)}
@@ -383,7 +388,7 @@ const ProcessAnalysis = () => {
       )}
 
       {/* Process-Level Context */}
-      <ProcessContextCard context={context || {}} onChange={handleContextChange} />
+      <ProcessContextCard context={displayContext} onChange={handleContextChange} />
 
       {/* BPMN Flow */}
       <Card>
@@ -391,7 +396,7 @@ const ProcessAnalysis = () => {
           <CardTitle className="text-base">{t.analysis.flowchart}</CardTitle>
         </CardHeader>
         <CardContent>
-          <BpmnFlowView steps={steps} />
+          <BpmnFlowView steps={displaySteps} />
         </CardContent>
       </Card>
 
@@ -427,7 +432,7 @@ const ProcessAnalysis = () => {
             <p className="text-xs text-muted-foreground">{t.analysis.approveSubtitle}</p>
           </div>
           <Button
-            disabled={steps.length === 0 || approved || approveMutation.isPending}
+            disabled={displaySteps.length === 0 || approved || approveMutation.isPending}
             onClick={() => approveMutation.mutate()}
           >
             {approveMutation.isPending ? (
