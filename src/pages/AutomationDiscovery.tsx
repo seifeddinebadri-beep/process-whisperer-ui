@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useLang } from "@/lib/i18n";
+import { mockUseCases as mockDiscoveryData } from "@/data/mockAutomationDiscoveryData";
 
 const impactColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
@@ -31,20 +32,13 @@ const AutomationDiscovery = () => {
     },
   });
 
+  // Use DB data if available, otherwise fallback to mock
+  const displayUseCases = (useCases && useCases.length > 0) ? useCases : mockDiscoveryData;
+
   if (isLoading) {
     return (
       <div className="max-w-5xl flex justify-center p-12">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!useCases || useCases.length === 0) {
-    return (
-      <div className="max-w-5xl">
-        <Card className="p-12 text-center">
-          <p className="text-muted-foreground">{t.discovery.noApproved}</p>
-        </Card>
       </div>
     );
   }
@@ -64,7 +58,7 @@ const AutomationDiscovery = () => {
 
         <TabsContent value="cards" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            {useCases.map((uc) => (
+            {displayUseCases.map((uc) => (
               <Card key={uc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
@@ -116,7 +110,7 @@ const AutomationDiscovery = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {useCases.map((uc) => (
+                  {displayUseCases.map((uc) => (
                     <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                       <TableCell className="font-medium text-sm">{uc.title}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{uc.description}</TableCell>
