@@ -8,16 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   ArrowLeft, AlertTriangle, CheckCircle2, XCircle, Info,
   Repeat, Binary, Zap, FileInput, ArrowRightLeft,
   User, Wrench, BookOpen, ShieldAlert, LinkIcon,
-  MessageSquare, Loader2,
+  MessageSquare, Loader2, Star, Download, ThumbsUp, ThumbsDown,
 } from "lucide-react";
-import { mockUseCaseDetails, TraceabilityLink } from "@/data/useCaseDetailData";
+import { mockUseCaseDetails, TraceabilityLink, mockVariants, type MockVariant } from "@/data/useCaseDetailData";
 import { useLang } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const signalIcons: Record<string, React.ReactNode> = {
   repetitive_manual: <Repeat className="h-4 w-4" />,
@@ -54,6 +57,7 @@ const UseCaseDetail = () => {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [newComment, setNewComment] = useState("");
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
 
   // Load use case from DB
   const { data: useCase, isLoading } = useQuery({
@@ -71,8 +75,85 @@ const UseCaseDetail = () => {
     enabled: !!id,
   });
 
-  // Try to find enriched mock detail (for legacy mock data or future AI-generated details)
+  // Load variants from DB
+  const { data: dbVariants } = useQuery({
+    queryKey: ["automation-variants", id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data, error } = await supabase
+        .from("automation_variants")
+        .select("*")
+        .eq("use_case_id", id)
+        .order("variant_number");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  // Use DB variants if available, otherwise mock
+  const variants: MockVariant[] = (dbVariants && dbVariants.length > 0)
+    ? dbVariants.map((v: any) => ({
+        variant_number: v.variant_number,
+        variant_name: v.variant_name,
+        approach_description: v.approach_description || "",
+        complexity: v.complexity || "medium",
+        impact: v.impact || "medium",
+        roi_estimate: v.roi_estimate || "—",
+        tools_suggested: v.tools_suggested || [],
+        pros: v.pros || [],
+        cons: v.cons || [],
+        estimated_cost: v.estimated_cost || "—",
+        estimated_timeline: v.estimated_timeline || "—",
+        recommended: v.recommended || false,
+      }))
+    : (id && mockVariants[id]) ? mockVariants[id] : [];
+
   const detail = id ? mockUseCaseDetails[id] : undefined;
+
+  const handleDownloadPdf = async () => {
+    if (!useCase) return;
+    setIsPdfLoading(true);
+    try {
+      const payload: any = {};
+      if (dbVariants && dbVariants.length > 0) {
+        payload.use_case_id = id;
+      } else {
+        payload.use_case_data = {
+          title: useCase.title,
+          description: useCase.description,
+          complexity: useCase.complexity,
+          impact: useCase.impact,
+          roi_estimate: useCase.roi_estimate,
+          tools_suggested: useCase.tools_suggested || [],
+          process_name: (useCase.uploaded_processes as any)?.file_name,
+        };
+        payload.variants_data = variants;
+      }
+
+      const { data, error } = await supabase.functions.invoke("generate-variant-pdf", {
+        body: payload,
+      });
+
+      if (error) throw error;
+
+      // data is HTML string — open in new window for printing
+      const blob = new Blob([data], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank");
+      if (win) {
+        win.addEventListener("load", () => {
+          setTimeout(() => win.print(), 500);
+        });
+      }
+      toast.success(t.variants?.pdfGenerated || "PDF généré");
+    } catch (e) {
+      console.error(e);
+      toast.error("Erreur lors de la génération du PDF");
+    } finally {
+      setIsPdfLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -107,9 +188,17 @@ const UseCaseDetail = () => {
     <div className="flex gap-6 max-w-[1400px]">
       {/* Main Content */}
       <div className="flex-1 min-w-0 space-y-6 pb-24">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/automation-discovery")} className="text-muted-foreground">
-          <ArrowLeft className="h-4 w-4 mr-1" /> {t.ucDetail.backToDiscovery}
-        </Button>
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/automation-discovery")} className="text-muted-foreground">
+            <ArrowLeft className="h-4 w-4 mr-1" /> {t.ucDetail.backToDiscovery}
+          </Button>
+          {variants.length > 0 && (
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isPdfLoading}>
+              {isPdfLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
+              {t.variants?.downloadPdf || "Télécharger PDF"}
+            </Button>
+          )}
+        </div>
 
         {/* ===== SECTION 1: Overview ===== */}
         <Card>
@@ -119,9 +208,16 @@ const UseCaseDetail = () => {
                 <CardTitle className="text-xl">{useCase.title}</CardTitle>
                 <CardDescription className="mt-1">{useCase.description}</CardDescription>
               </div>
-              <Badge className={`capitalize shrink-0 ${levelColors[useCase.impact || "medium"]}`}>
-                {t.discovery[(useCase.impact || "medium") as "low" | "medium" | "high"]} {t.discovery.potential.toLowerCase()}
-              </Badge>
+              <div className="flex items-center gap-2 shrink-0">
+                {variants.length > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    {variants.length} {t.variants?.variantCount || "variantes"}
+                  </Badge>
+                )}
+                <Badge className={`capitalize ${levelColors[useCase.impact || "medium"]}`}>
+                  {t.discovery[(useCase.impact || "medium") as "low" | "medium" | "high"]} {t.discovery.potential.toLowerCase()}
+                </Badge>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -154,6 +250,170 @@ const UseCaseDetail = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* ===== VARIANTS SECTION ===== */}
+        {variants.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t.variants?.title || "Variantes d'automatisation"}</CardTitle>
+              <CardDescription>{t.variants?.subtitle || "Différentes approches pour automatiser ce cas d'usage"}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue={`v-${variants[0]?.variant_number || 1}`}>
+                <TabsList className="mb-4">
+                  {variants.map((v) => (
+                    <TabsTrigger key={v.variant_number} value={`v-${v.variant_number}`} className="gap-1.5">
+                      {v.recommended && <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />}
+                      {v.variant_name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {variants.map((v) => (
+                  <TabsContent key={v.variant_number} value={`v-${v.variant_number}`}>
+                    <div className="space-y-4">
+                      {v.recommended && (
+                        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-sm">
+                          <Star className="h-4 w-4 text-amber-500 fill-amber-500 shrink-0" />
+                          <span className="font-medium text-amber-800">{t.variants?.recommended || "Variante recommandée"}</span>
+                        </div>
+                      )}
+
+                      <p className="text-sm">{v.approach_description}</p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+                        <div className="border rounded-lg p-3 text-center">
+                          <Label className="text-xs text-muted-foreground">Complexité</Label>
+                          <p className="mt-1"><Badge className={`capitalize ${levelColors[v.complexity]}`}>{v.complexity}</Badge></p>
+                        </div>
+                        <div className="border rounded-lg p-3 text-center">
+                          <Label className="text-xs text-muted-foreground">Impact</Label>
+                          <p className="mt-1"><Badge className={`capitalize ${levelColors[v.impact]}`}>{v.impact}</Badge></p>
+                        </div>
+                        <div className="border rounded-lg p-3 text-center">
+                          <Label className="text-xs text-muted-foreground">ROI</Label>
+                          <p className="mt-1 font-medium text-xs">{v.roi_estimate}</p>
+                        </div>
+                        <div className="border rounded-lg p-3 text-center">
+                          <Label className="text-xs text-muted-foreground">{t.variants?.cost || "Coût"}</Label>
+                          <p className="mt-1 font-medium text-xs">{v.estimated_cost}</p>
+                        </div>
+                        <div className="border rounded-lg p-3 text-center">
+                          <Label className="text-xs text-muted-foreground">{t.variants?.timeline || "Délai"}</Label>
+                          <p className="mt-1 font-medium text-xs">{v.estimated_timeline}</p>
+                        </div>
+                      </div>
+
+                      {v.tools_suggested.length > 0 && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">{t.variants?.tools || "Outils & Technologies"}</Label>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {v.tools_suggested.map((tool, i) => (
+                              <Badge key={i} variant="outline" className="text-xs">{tool}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs font-semibold uppercase tracking-wide text-green-700 flex items-center gap-1">
+                            <ThumbsUp className="h-3 w-3" /> {t.variants?.pros || "Avantages"}
+                          </Label>
+                          <ul className="mt-2 space-y-1">
+                            {v.pros.map((p, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
+                                {p}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-semibold uppercase tracking-wide text-destructive flex items-center gap-1">
+                            <ThumbsDown className="h-3 w-3" /> {t.variants?.cons || "Inconvénients"}
+                          </Label>
+                          <ul className="mt-2 space-y-1">
+                            {v.cons.map((c, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm">
+                                <XCircle className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
+                                {c}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== COMPARISON TABLE ===== */}
+        {variants.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t.variants?.comparison || "Comparaison des variantes"}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[140px]">{t.variants?.metric || "Métrique"}</TableHead>
+                    {variants.map((v) => (
+                      <TableHead key={v.variant_number}>
+                        {v.recommended && <Star className="h-3 w-3 inline text-amber-500 fill-amber-500 mr-1" />}
+                        {v.variant_name}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-medium text-xs">Complexité</TableCell>
+                    {variants.map((v) => (
+                      <TableCell key={v.variant_number}><Badge className={`capitalize text-xs ${levelColors[v.complexity]}`}>{v.complexity}</Badge></TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium text-xs">Impact</TableCell>
+                    {variants.map((v) => (
+                      <TableCell key={v.variant_number}><Badge className={`capitalize text-xs ${levelColors[v.impact]}`}>{v.impact}</Badge></TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium text-xs">ROI</TableCell>
+                    {variants.map((v) => (
+                      <TableCell key={v.variant_number} className="text-xs">{v.roi_estimate}</TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium text-xs">{t.variants?.cost || "Coût"}</TableCell>
+                    {variants.map((v) => (
+                      <TableCell key={v.variant_number} className="text-xs">{v.estimated_cost}</TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium text-xs">{t.variants?.timeline || "Délai"}</TableCell>
+                    {variants.map((v) => (
+                      <TableCell key={v.variant_number} className="text-xs">{v.estimated_timeline}</TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium text-xs">{t.variants?.tools || "Outils"}</TableCell>
+                    {variants.map((v) => (
+                      <TableCell key={v.variant_number} className="text-xs">
+                        <div className="flex flex-wrap gap-1">{v.tools_suggested.map((t, i) => <Badge key={i} variant="outline" className="text-[10px]">{t}</Badge>)}</div>
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ===== Enriched sections (only if mock detail exists) ===== */}
         {detail && (
@@ -241,9 +501,7 @@ const UseCaseDetail = () => {
                     ))}
                   </div>
                 </div>
-
                 <Separator />
-
                 <div>
                   <Label className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t.ucDetail.willRemainManual}</Label>
                   <div className="mt-2 space-y-2">
@@ -258,9 +516,7 @@ const UseCaseDetail = () => {
                     ))}
                   </div>
                 </div>
-
                 <Separator />
-
                 <div>
                   <Label className="text-xs font-semibold uppercase tracking-wide text-destructive">{t.ucDetail.explicitExclusions}</Label>
                   <div className="mt-2 space-y-2">
@@ -409,7 +665,6 @@ const UseCaseDetail = () => {
                       </div>
                     </div>
                   </div>
-
                   <div className="space-y-3">
                     <h4 className="text-sm font-semibold text-primary uppercase tracking-wide">{t.ucDetail.afterAutomated}</h4>
                     <div className="space-y-2 text-sm">
@@ -488,7 +743,6 @@ const UseCaseDetail = () => {
                     ))}
                   </div>
                 )}
-
                 {detail.comments.length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">{t.ucDetail.discussion}</Label>
@@ -505,7 +759,6 @@ const UseCaseDetail = () => {
                     ))}
                   </div>
                 )}
-
                 <div className="flex gap-2">
                   <Textarea
                     value={newComment}
@@ -523,8 +776,8 @@ const UseCaseDetail = () => {
           </>
         )}
 
-        {/* If no enriched detail, show a simple summary card */}
-        {!detail && (
+        {/* If no enriched detail and no variants, show a simple summary card */}
+        {!detail && variants.length === 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Résumé de l'analyse</CardTitle>
@@ -533,19 +786,11 @@ const UseCaseDetail = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="border rounded-lg p-4 text-center">
                   <Label className="text-xs text-muted-foreground">Impact</Label>
-                  <p className="mt-1">
-                    <Badge className={`capitalize ${levelColors[useCase.impact || "medium"]}`}>
-                      {useCase.impact || "medium"}
-                    </Badge>
-                  </p>
+                  <p className="mt-1"><Badge className={`capitalize ${levelColors[useCase.impact || "medium"]}`}>{useCase.impact || "medium"}</Badge></p>
                 </div>
                 <div className="border rounded-lg p-4 text-center">
                   <Label className="text-xs text-muted-foreground">Complexité</Label>
-                  <p className="mt-1">
-                    <Badge className={`capitalize ${levelColors[useCase.complexity || "medium"]}`}>
-                      {useCase.complexity || "medium"}
-                    </Badge>
-                  </p>
+                  <p className="mt-1"><Badge className={`capitalize ${levelColors[useCase.complexity || "medium"]}`}>{useCase.complexity || "medium"}</Badge></p>
                 </div>
                 <div className="border rounded-lg p-4 text-center">
                   <Label className="text-xs text-muted-foreground">ROI estimé</Label>
@@ -567,7 +812,7 @@ const UseCaseDetail = () => {
         )}
       </div>
 
-      {/* ===== SECTION 8: Traceability Panel (Right Side) - only if detail exists ===== */}
+      {/* ===== Traceability Panel (Right Side) ===== */}
       {detail && (
         <div className="hidden lg:block w-72 shrink-0">
           <div className="sticky top-4 space-y-4">

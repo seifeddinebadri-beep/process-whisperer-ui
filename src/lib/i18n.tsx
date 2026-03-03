@@ -309,6 +309,23 @@ export const translations = {
       legend: "Légende",
     },
 
+    // Variants
+    variants: {
+      title: "Variantes d'automatisation",
+      subtitle: "Différentes approches pour automatiser ce cas d'usage",
+      recommended: "Variante recommandée",
+      variantCount: "variantes",
+      comparison: "Comparaison des variantes",
+      metric: "Métrique",
+      cost: "Coût estimé",
+      timeline: "Délai estimé",
+      tools: "Outils & Technologies",
+      pros: "Avantages",
+      cons: "Inconvénients",
+      downloadPdf: "Télécharger PDF",
+      pdfGenerated: "PDF généré — utilisez Ctrl+P pour enregistrer",
+    },
+
     // Language switcher
     language: "Langue",
     switchToFr: "Français",
@@ -608,6 +625,23 @@ export const translations = {
       noUniqueEL: "No unique steps in the event log.",
       noUniqueKB: "No unique steps in the knowledge base.",
       legend: "Legend",
+    },
+
+    // Variants
+    variants: {
+      title: "Automation Variants",
+      subtitle: "Different approaches to automate this use case",
+      recommended: "Recommended variant",
+      variantCount: "variants",
+      comparison: "Variant Comparison",
+      metric: "Metric",
+      cost: "Estimated Cost",
+      timeline: "Estimated Timeline",
+      tools: "Tools & Technologies",
+      pros: "Pros",
+      cons: "Cons",
+      downloadPdf: "Download PDF",
+      pdfGenerated: "PDF generated — use Ctrl+P to save",
     },
 
     language: "Language",

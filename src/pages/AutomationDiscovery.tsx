@@ -24,7 +24,7 @@ const AutomationDiscovery = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("automation_use_cases")
-        .select("*, uploaded_processes(file_name, status)")
+        .select("*, uploaded_processes(file_name, status), automation_variants(id)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
@@ -69,9 +69,16 @@ const AutomationDiscovery = () => {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
-                    <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
-                      {t.discovery[(uc.impact || "medium") as "low" | "medium" | "high"]}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      {(uc as any).automation_variants?.length > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {(uc as any).automation_variants.length} {t.variants?.variantCount || "variantes"}
+                        </Badge>
+                      )}
+                      <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
+                        {t.discovery[(uc.impact || "medium") as "low" | "medium" | "high"]}
+                      </Badge>
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{uc.description}</p>
                 </CardHeader>

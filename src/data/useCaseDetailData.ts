@@ -794,3 +794,175 @@ export const mockUseCaseDetails: Record<string, UseCaseDetail> = {
     comments: [],
   },
 };
+
+// ========== Variant Mock Data ==========
+
+export interface MockVariant {
+  variant_number: number;
+  variant_name: string;
+  approach_description: string;
+  complexity: string;
+  impact: string;
+  roi_estimate: string;
+  tools_suggested: string[];
+  pros: string[];
+  cons: string[];
+  estimated_cost: string;
+  estimated_timeline: string;
+  recommended: boolean;
+}
+
+export const mockVariants: Record<string, MockVariant[]> = {
+  uc1: [
+    {
+      variant_number: 1,
+      variant_name: "RPA Simple",
+      approach_description: "Automatisation basée sur un robot RPA qui simule les actions manuelles : ouverture des emails, téléchargement des pièces jointes, saisie dans SAP via l'interface utilisateur. Approche non-invasive ne nécessitant aucune modification de SAP.",
+      complexity: "low",
+      impact: "medium",
+      roi_estimate: "Réduction de 40% du temps de saisie",
+      tools_suggested: ["UiPath", "Outlook", "SAP GUI"],
+      pros: [
+        "Mise en œuvre rapide (2-3 semaines)",
+        "Aucune modification de SAP requise",
+        "Coût initial faible",
+        "Facilement réversible",
+      ],
+      cons: [
+        "Fragile aux changements d'interface SAP",
+        "Ne gère pas les formats de facture variés",
+        "Maintenance continue nécessaire",
+        "Pas de validation intelligente des données",
+      ],
+      estimated_cost: "5 000 – 15 000 €",
+      estimated_timeline: "2-3 semaines",
+      recommended: false,
+    },
+    {
+      variant_number: 2,
+      variant_name: "IA + OCR",
+      approach_description: "Extraction intelligente des données de facture via OCR (Azure Form Recognizer) couplée à une validation IA. Les données extraites sont injectées dans SAP via API. Gère les formats variés et apprend des corrections.",
+      complexity: "medium",
+      impact: "high",
+      roi_estimate: "Réduction de 80% du temps de traitement, taux d'erreur < 3%",
+      tools_suggested: ["Azure Form Recognizer", "SAP API", "Power Automate", "Azure Functions"],
+      pros: [
+        "Gère les formats de facture variés",
+        "Amélioration continue par apprentissage",
+        "Validation intelligente des données",
+        "Intégration SAP via API (robuste)",
+        "Scalable pour des volumes croissants",
+      ],
+      cons: [
+        "Coût initial plus élevé",
+        "Nécessite une configuration OCR initiale",
+        "Dépendance à Azure",
+        "Délai de mise en œuvre plus long",
+      ],
+      estimated_cost: "25 000 – 50 000 €",
+      estimated_timeline: "6-8 semaines",
+      recommended: true,
+    },
+    {
+      variant_number: 3,
+      variant_name: "Intégration Complète",
+      approach_description: "Solution end-to-end intégrant OCR, validation IA, matching automatique PO/GR, workflow d'approbation et paiement. Couvre l'ensemble du cycle de vie de la facture avec un tableau de bord temps réel.",
+      complexity: "high",
+      impact: "high",
+      roi_estimate: "Réduction de 90% du temps, ROI en 8-12 mois",
+      tools_suggested: ["Azure Form Recognizer", "SAP S/4HANA", "Power Platform", "Azure AI", "Power BI"],
+      pros: [
+        "Automatisation de bout en bout",
+        "Tableau de bord et analytics temps réel",
+        "Réduction maximale des erreurs",
+        "Conformité SOX intégrée",
+        "Scalable pour l'entreprise",
+      ],
+      cons: [
+        "Investissement initial important",
+        "Complexité de mise en œuvre élevée",
+        "Nécessite coordination multi-équipes",
+        "Risque de sur-ingénierie pour des volumes modérés",
+        "Délai de mise en œuvre long",
+      ],
+      estimated_cost: "80 000 – 150 000 €",
+      estimated_timeline: "3-5 mois",
+      recommended: false,
+    },
+  ],
+  uc2: [
+    {
+      variant_number: 1,
+      variant_name: "Matching SAP natif",
+      approach_description: "Activation et configuration des fonctionnalités de matching automatique native de SAP. Paramétrage des tolérances et des règles de matching sans développement externe.",
+      complexity: "low",
+      impact: "high",
+      roi_estimate: "Réduction de 70% de l'effort de validation",
+      tools_suggested: ["SAP ERP", "SAP Configuration"],
+      pros: [
+        "Utilise les fonctionnalités existantes",
+        "Coût minimal",
+        "Support SAP standard",
+      ],
+      cons: [
+        "Flexibilité limitée des règles",
+        "Pas de ML pour cas ambigus",
+      ],
+      estimated_cost: "3 000 – 8 000 €",
+      estimated_timeline: "1-2 semaines",
+      recommended: true,
+    },
+    {
+      variant_number: 2,
+      variant_name: "Matching IA avancé",
+      approach_description: "Module de matching intelligent utilisant le ML pour gérer les cas ambigus, apprendre des décisions passées et améliorer la précision au fil du temps.",
+      complexity: "high",
+      impact: "high",
+      roi_estimate: "Réduction de 95% des interventions manuelles",
+      tools_suggested: ["Azure ML", "SAP API", "Python"],
+      pros: [
+        "Gère les cas ambigus",
+        "Amélioration continue",
+        "Taux de matching supérieur",
+      ],
+      cons: [
+        "Développement sur mesure",
+        "Données d'entraînement nécessaires",
+        "Coût et délai élevés",
+      ],
+      estimated_cost: "40 000 – 70 000 €",
+      estimated_timeline: "2-3 mois",
+      recommended: false,
+    },
+  ],
+  uc3: [
+    {
+      variant_number: 1,
+      variant_name: "Power Automate",
+      approach_description: "Workflow d'approbation configuré dans Power Automate avec routage basé sur la matrice d'approbation existante. Notifications Teams/email automatiques.",
+      complexity: "low",
+      impact: "medium",
+      roi_estimate: "Réduction de 60% du temps de routage",
+      tools_suggested: ["Power Automate", "Microsoft Teams", "SAP"],
+      pros: ["Mise en place rapide", "Intégration Microsoft native", "Faible coût"],
+      cons: ["Logique d'approbation simple", "Limité à l'écosystème Microsoft"],
+      estimated_cost: "5 000 – 10 000 €",
+      estimated_timeline: "1-2 semaines",
+      recommended: true,
+    },
+    {
+      variant_number: 2,
+      variant_name: "Workflow SAP intégré",
+      approach_description: "Utilisation du module SAP Workflow pour un routage d'approbation intégré au sein de l'ERP, avec traçabilité complète et conformité native.",
+      complexity: "medium",
+      impact: "high",
+      roi_estimate: "Réduction de 80% du temps, traçabilité complète",
+      tools_suggested: ["SAP Workflow", "SAP Fiori"],
+      pros: ["Intégration SAP native", "Traçabilité SOX", "Pas de système externe"],
+      cons: ["Configuration SAP complexe", "Coût de licence", "Moins flexible"],
+      estimated_cost: "20 000 – 40 000 €",
+      estimated_timeline: "4-6 semaines",
+      recommended: false,
+    },
+  ],
+};
