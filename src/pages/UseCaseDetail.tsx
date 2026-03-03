@@ -19,6 +19,7 @@ import {
   MessageSquare, Loader2, Star, Download, ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { mockUseCaseDetails, TraceabilityLink, mockVariants, type MockVariant } from "@/data/useCaseDetailData";
+import { mockUseCases as mockDiscoveryData } from "@/data/mockAutomationDiscoveryData";
 import { useLang } from "@/lib/i18n";
 import { toast } from "sonner";
 
@@ -60,7 +61,7 @@ const UseCaseDetail = () => {
   const [isPdfLoading, setIsPdfLoading] = useState(false);
 
   // Load use case from DB
-  const { data: useCase, isLoading } = useQuery({
+  const { data: dbUseCase, isLoading } = useQuery({
     queryKey: ["automation-use-case", id],
     queryFn: async () => {
       if (!id) return null;
@@ -74,6 +75,13 @@ const UseCaseDetail = () => {
     },
     enabled: !!id,
   });
+
+  // Fallback to mock data if DB returns nothing
+  const mockUc = id ? mockDiscoveryData.find((m) => m.id === id) : undefined;
+  const useCase = dbUseCase || (mockUc ? {
+    ...mockUc,
+    uploaded_processes: mockUc.uploaded_processes as any,
+  } : null);
 
   // Load variants from DB
   const { data: dbVariants } = useQuery({
