@@ -793,6 +793,421 @@ export const mockUseCaseDetails: Record<string, UseCaseDetail> = {
     decisions: [],
     comments: [],
   },
+
+  uc5: {
+    useCaseId: "uc5",
+    linkedProcess: "Candidate Screening",
+    department: "Ressources Humaines",
+    entity: "Talent Acquisition",
+    automationPattern: "Intelligent Document Analysis (NLP)",
+
+    detectionSignals: [
+      {
+        id: "ds12",
+        type: "repetitive_manual",
+        label: "Tâches manuelles répétitives",
+        description: "Chaque CV est lu manuellement et comparé aux exigences du poste par le recruteur.",
+        triggeringStep: "Trier les CV",
+        ruleOrThreshold: "200+ candidatures par poste ouvert, même grille d'évaluation appliquée",
+      },
+      {
+        id: "ds13",
+        type: "structured_inputs",
+        label: "Entrées structurées",
+        description: "Les CV et descriptions de poste suivent des formats prévisibles (compétences, expérience, formation).",
+        triggeringStep: "Recevoir candidature",
+        ruleOrThreshold: "85% des CV sont au format PDF/DOCX avec sections identifiables",
+      },
+      {
+        id: "ds14",
+        type: "rule_based",
+        label: "Décisions basées sur des règles",
+        description: "Le premier tri suit des critères objectifs : années d'expérience, diplômes requis, compétences clés.",
+        triggeringStep: "Évaluer critères minimum",
+        ruleOrThreshold: "Critères éliminatoires définis dans 90% des fiches de poste",
+      },
+      {
+        id: "ds15",
+        type: "high_frequency",
+        label: "Volume élevé",
+        description: "L'équipe traite en moyenne 150 candidatures par semaine durant les périodes de recrutement.",
+        triggeringStep: "Trier les CV",
+        ruleOrThreshold: "Fréquence > 100 candidatures/semaine",
+      },
+    ],
+
+    contextReferences: [
+      { id: "cr13", type: "role", name: "Recruteur", detail: "Passe ~40% de son temps à trier et évaluer les CV. Gère 5-8 postes simultanément." },
+      { id: "cr14", type: "role", name: "Hiring Manager", detail: "Définit les critères du poste et évalue la shortlist finale." },
+      { id: "cr15", type: "tool", name: "Workday", detail: "ATS principal — gestion des candidatures, suivi du pipeline." },
+      { id: "cr16", type: "tool", name: "LinkedIn Recruiter", detail: "Source de candidatures et communication avec les candidats." },
+      { id: "cr17", type: "business_rule", name: "Critères éliminatoires", detail: "Expérience minimum, diplômes requis, localisation géographique, langues." },
+      { id: "cr18", type: "constraint", name: "Réglementation RGPD", detail: "Les données des candidats doivent être traitées conformément au RGPD — consentement, droit à l'oubli, durée de conservation." },
+    ],
+
+    confidenceLevel: "high",
+    confidenceExplanation: "Confiance élevée car les critères de tri sont explicites, les volumes sont importants et le processus est hautement répétitif.",
+
+    willBeAutomated: [
+      { step: "Extraire les informations du CV", system: "Azure AI / NLP" },
+      { step: "Comparer aux critères du poste", system: "Moteur de scoring", decision: "Score de pertinence ≥ seuil" },
+      { step: "Classer les candidats", system: "Workday API" },
+      { step: "Générer la shortlist", system: "Workflow automatisé" },
+      { step: "Envoyer les notifications aux candidats", system: "Email automatique" },
+    ],
+
+    willRemainManual: [
+      { item: "Évaluation qualitative de la shortlist", reason: "Le hiring manager doit évaluer la culture fit et le potentiel de développement." },
+      { item: "Entretien de pré-qualification", reason: "Interaction humaine nécessaire pour évaluer la motivation et la communication." },
+      { item: "Décision finale d'embauche", reason: "Implique négociation salariale et validation RH." },
+    ],
+
+    explicitExclusions: [
+      { scenario: "Postes de direction (C-level)", reason: "Processus de recrutement spécifique avec cabinet de chasse de têtes." },
+      { scenario: "Candidatures spontanées sans poste cible", reason: "Pas de fiche de poste pour le matching automatique." },
+      { scenario: "Candidats internes", reason: "Processus de mobilité interne distinct avec critères différents." },
+    ],
+
+    detailedSteps: [
+      {
+        id: "das13",
+        stepName: "Réception et parsing du CV",
+        trigger: "Nouvelle candidature reçue dans Workday",
+        inputData: ["CV au format PDF/DOCX", "Fiche de poste", "Profil LinkedIn (si disponible)"],
+        validationRules: ["Format de fichier supporté (PDF, DOCX)", "Taille < 5 Mo", "Candidature complète (CV + lettre de motivation)"],
+        systemAction: "Le système parse le CV, extrait les sections (expérience, formation, compétences) et crée un profil candidat structuré.",
+        outputProduced: "Profil candidat JSON : nom, expériences, compétences, formation, langues, certifications",
+        logging: "Log : candidature reçue, parsing réussi/échoué, temps de traitement.",
+      },
+      {
+        id: "das14",
+        stepName: "Scoring par critères objectifs",
+        trigger: "Profil candidat structuré disponible",
+        inputData: ["Profil candidat structuré", "Critères de la fiche de poste"],
+        validationRules: ["Expérience minimum atteinte", "Diplômes requis présents", "Compétences obligatoires couvertes à ≥ 60%"],
+        systemAction: "Le moteur NLP compare sémantiquement les compétences du candidat avec les exigences. Score pondéré calculé (0-100).",
+        outputProduced: "Score de pertinence avec détail par critère, classification : Qualifié / À évaluer / Non qualifié",
+        logging: "Log : score par critère, score global, classification, justification.",
+      },
+      {
+        id: "das15",
+        stepName: "Classement et génération de shortlist",
+        trigger: "Scoring terminé pour toutes les candidatures d'un poste",
+        inputData: ["Scores de tous les candidats", "Nombre de places en shortlist (configurable)"],
+        validationRules: ["Minimum 3 candidats qualifiés pour constituer une shortlist", "Diversité vérifiée (pas de biais sur genre/âge)"],
+        systemAction: "Classement des candidats par score décroissant. Top N sélectionnés pour la shortlist. Rapport de diversité généré.",
+        outputProduced: "Shortlist avec profils classés, rapport de scoring comparatif, rapport de diversité",
+        logging: "Log : shortlist générée, nombre de candidats qualifiés, distribution des scores.",
+      },
+      {
+        id: "das16",
+        stepName: "Notification automatique aux candidats",
+        trigger: "Shortlist validée par le recruteur",
+        inputData: ["Statut candidat (shortlisté / non retenu)", "Template email", "Données candidat"],
+        validationRules: ["Email valide", "Consentement RGPD vérifié", "Délai de notification ≤ 5 jours ouvrés"],
+        systemAction: "Envoi d'emails personnalisés : invitation à l'entretien pour les shortlistés, message de rejet courtois pour les autres.",
+        outputProduced: "Emails envoyés, statuts mis à jour dans Workday",
+        logging: "Log : emails envoyés, taux de délivrance, statuts Workday mis à jour.",
+      },
+    ],
+
+    exceptions: [
+      {
+        id: "ex9",
+        whatCanGoWrong: "CV dans un format non supporté (image, scan mal formaté)",
+        howDetected: "Échec du parsing — aucune section structurée détectée",
+        whatHappensNext: "CV mis en file d'attente pour revue manuelle avec notification au recruteur",
+        whoIsNotified: "Recruteur assigné au poste",
+        dataPreserved: "Fichier original, métadonnées de la candidature, résultat d'erreur de parsing",
+        severity: "low",
+      },
+      {
+        id: "ex10",
+        whatCanGoWrong: "Aucun candidat n'atteint le score minimum de qualification",
+        howDetected: "Tous les scores < seuil configurable (par défaut 40/100)",
+        whatHappensNext: "Alerte au recruteur et au hiring manager. Suggestion de réviser les critères du poste.",
+        whoIsNotified: "Recruteur et Hiring Manager",
+        dataPreserved: "Tous les scores avec détails, critères appliqués, suggestion de modification",
+        severity: "medium",
+      },
+      {
+        id: "ex11",
+        whatCanGoWrong: "Biais détecté dans les résultats (surreprésentation d'un groupe)",
+        howDetected: "Contrôle de diversité automatique sur la shortlist",
+        whatHappensNext: "Rapport de biais généré. Shortlist mise en attente pour revue humaine.",
+        whoIsNotified: "Responsable Diversité & Inclusion, Recruteur",
+        dataPreserved: "Distribution démographique anonymisée, métriques de biais, shortlist alternative",
+        severity: "high",
+      },
+    ],
+
+    comparison: {
+      before: {
+        steps: 5,
+        humanEffort: "~3 minutes par CV × 200 = 10 heures par poste ouvert",
+        toolsInvolved: ["Workday", "Email", "Excel", "LinkedIn"],
+        errorRisks: [
+          "Biais inconscient du recruteur",
+          "Incohérence d'évaluation entre recruteurs",
+          "Candidats qualifiés manqués par fatigue",
+          "Délais de réponse longs (candidats perdus)",
+        ],
+      },
+      after: {
+        steps: 3,
+        automationCheckpoints: [
+          "Parsing et extraction du CV",
+          "Scoring NLP par critères objectifs",
+          "Contrôle de diversité automatique",
+          "Notification automatisée",
+        ],
+        humanTouchpoints: [
+          "Validation de la shortlist",
+          "Entretien de pré-qualification",
+          "Décision finale d'embauche",
+        ],
+        residualRisks: [
+          "Biais intégré dans les données d'entraînement (~2%)",
+          "CV très atypiques mal évalués",
+          "Dépendance à la qualité des fiches de poste",
+        ],
+      },
+    },
+
+    valueMetrics: [
+      { metric: "Valeur métier", level: "high", explanation: "Réduit le temps de screening de 70%, améliore la qualité de la shortlist et l'expérience candidat.", assumptions: "Basé sur 200 candidatures/poste et 15 postes ouverts/trimestre." },
+      { metric: "Complexité de mise en œuvre", level: "medium", explanation: "Nécessite l'intégration NLP, la configuration Workday API et le calibrage du modèle de scoring.", assumptions: "Suppose un accès API Workday et un abonnement Azure AI." },
+      { metric: "Niveau de risque", level: "low", explanation: "Risque faible grâce au contrôle humain de la shortlist et aux vérifications de biais intégrées.", assumptions: "Suppose une revue régulière des métriques de biais." },
+      { metric: "Impact sur le changement", level: "medium", explanation: "Les recruteurs passent de la lecture exhaustive de CV à la validation de shortlists IA. Formation nécessaire.", assumptions: "Programme de formation de 2 semaines prévu avant le déploiement." },
+    ],
+
+    traceabilityLinks: [
+      { type: "process_step", name: "Trier les CV", detail: "Étape de tri manuel remplacée par scoring automatique" },
+      { type: "process_step", name: "Constituer shortlist", detail: "Étape de sélection assistée par classement IA" },
+      { type: "role", name: "Recruteur", detail: "Opérateur principal — passe de l'exécution à la supervision" },
+      { type: "role", name: "Hiring Manager", detail: "Validateur de la shortlist finale" },
+      { type: "tool", name: "Workday", detail: "ATS source et destination des données candidats" },
+      { type: "tool", name: "Azure AI", detail: "Moteur NLP pour l'analyse sémantique" },
+      { type: "business_rule", name: "Critères éliminatoires", detail: "Expérience, diplômes, compétences obligatoires" },
+      { type: "business_rule", name: "RGPD", detail: "Consentement, durée de conservation, droit à l'oubli" },
+    ],
+
+    decisions: [
+      {
+        id: "dec3",
+        action: "approved",
+        user: "Julie Martin (DRH)",
+        timestamp: "2026-02-16T10:00:00",
+        comment: "Approuvé. Le contrôle de biais intégré est un point fort. À déployer sur 3 postes pilotes d'abord.",
+      },
+    ],
+    comments: [
+      {
+        id: "com4",
+        user: "Julie Martin",
+        timestamp: "2026-02-15T14:30:00",
+        text: "Comment le modèle gère-t-il les reconversions professionnelles ? Un candidat avec peu d'expérience directe mais de bonnes compétences transférables pourrait être pénalisé.",
+      },
+      {
+        id: "com5",
+        user: "Thomas Dupont (Data Scientist)",
+        timestamp: "2026-02-15T16:45:00",
+        text: "Bonne question. Le scoring NLP prend en compte la similarité sémantique, pas seulement les mots-clés exacts. Un développeur Java qui postule pour du Python sera reconnu comme pertinent. On ajoutera aussi un flag 'profil atypique' pour les cas limites.",
+      },
+    ],
+  },
+
+  uc6: {
+    useCaseId: "uc6",
+    linkedProcess: "Candidate Screening",
+    department: "Ressources Humaines",
+    entity: "Talent Acquisition",
+    automationPattern: "Calendar Integration & Workflow",
+
+    detectionSignals: [
+      {
+        id: "ds16",
+        type: "repetitive_manual",
+        label: "Tâches manuelles répétitives",
+        description: "Le recruteur envoie manuellement des emails pour proposer des créneaux et coordonner les agendas.",
+        triggeringStep: "Planifier entretien",
+        ruleOrThreshold: "5-10 emails échangés en moyenne par entretien planifié",
+      },
+      {
+        id: "ds17",
+        type: "tool_transfer",
+        label: "Transfert inter-outils",
+        description: "Le recruteur navigue entre Outlook, Workday et Teams pour vérifier les disponibilités et créer les invitations.",
+        triggeringStep: "Vérifier disponibilités",
+        ruleOrThreshold: "3 outils consultés manuellement par planification",
+      },
+    ],
+
+    contextReferences: [
+      { id: "cr19", type: "role", name: "Recruteur", detail: "Coordonne les agendas entre candidat, hiring manager et panel. ~30% du temps passé en coordination." },
+      { id: "cr20", type: "tool", name: "Outlook", detail: "Calendrier principal pour vérifier les disponibilités des managers." },
+      { id: "cr21", type: "tool", name: "Microsoft Teams", detail: "Plateforme d'entretien vidéo par défaut." },
+      { id: "cr22", type: "business_rule", name: "Délai de planification", detail: "L'entretien doit être planifié dans les 5 jours ouvrés suivant la shortlist." },
+    ],
+
+    confidenceLevel: "high",
+    confidenceExplanation: "Confiance élevée — le processus est purement logistique, sans décision subjective. Les API calendrier sont matures.",
+
+    willBeAutomated: [
+      { step: "Vérifier les disponibilités du manager", system: "Microsoft Graph API" },
+      { step: "Proposer des créneaux au candidat", system: "Email automatique / Bookings" },
+      { step: "Confirmer et créer l'invitation", system: "Outlook + Teams", decision: "Créneau accepté par le candidat" },
+      { step: "Envoyer les rappels", system: "Workflow automatisé" },
+    ],
+
+    willRemainManual: [
+      { item: "Choix du panel d'entretien", reason: "Le recruteur sélectionne les interviewers en fonction du poste et de la disponibilité de l'équipe." },
+      { item: "Reprogrammation pour cas exceptionnels", reason: "Annulations de dernière minute nécessitent une gestion humaine du contexte." },
+    ],
+
+    explicitExclusions: [
+      { scenario: "Entretiens sur site avec logistique voyage", reason: "Implique réservation de billets, hôtels et remboursements — processus séparé." },
+      { scenario: "Entretiens pour postes confidentiels", reason: "Nécessite coordination privée hors des systèmes standard." },
+    ],
+
+    detailedSteps: [
+      {
+        id: "das17",
+        stepName: "Récupérer les disponibilités",
+        trigger: "Candidat ajouté à la shortlist validée",
+        inputData: ["Calendrier Outlook du hiring manager", "Calendrier du panel (si applicable)", "Préférences du candidat"],
+        validationRules: ["Créneaux de 45-60 minutes", "Pas de conflit avec les réunions existantes", "Dans les 5 jours ouvrés"],
+        systemAction: "L'API Graph interroge les calendriers Outlook et identifie les créneaux communs disponibles.",
+        outputProduced: "Liste de 3-5 créneaux proposables, triés par préférence",
+        logging: "Log : nombre de créneaux identifiés, calendriers consultés, contraintes appliquées.",
+      },
+      {
+        id: "das18",
+        stepName: "Envoyer proposition au candidat",
+        trigger: "Créneaux disponibles identifiés",
+        inputData: ["Créneaux proposés", "Email du candidat", "Template d'invitation"],
+        validationRules: ["Email candidat valide", "Au moins 3 créneaux proposés", "Lien de réservation fonctionnel"],
+        systemAction: "Email personnalisé envoyé au candidat avec un lien Bookings/Calendly pour choisir son créneau préféré.",
+        outputProduced: "Email de proposition envoyé, lien de réservation actif",
+        logging: "Log : email envoyé, créneaux proposés, lien de réservation.",
+      },
+      {
+        id: "das19",
+        stepName: "Confirmer et créer l'événement",
+        trigger: "Candidat sélectionne un créneau",
+        inputData: ["Créneau choisi", "Détails du candidat", "Lien Teams à générer"],
+        validationRules: ["Créneau toujours disponible (double-check)", "Lien Teams généré avec succès"],
+        systemAction: "Système crée l'invitation calendrier pour tous les participants, génère le lien Teams, et met à jour Workday.",
+        outputProduced: "Invitation calendrier envoyée, lien Teams créé, statut Workday mis à jour",
+        logging: "Log : événement créé, participants notifiés, statut Workday.",
+      },
+      {
+        id: "das20",
+        stepName: "Rappels automatiques",
+        trigger: "24h et 1h avant l'entretien",
+        inputData: ["Détails de l'entretien", "Contacts des participants"],
+        validationRules: ["Entretien non annulé", "Rappel non déjà envoyé"],
+        systemAction: "Envoi de rappels email/Teams au candidat et aux interviewers avec les détails de l'entretien.",
+        outputProduced: "Rappels envoyés à tous les participants",
+        logging: "Log : rappels envoyés, destinataires, heure d'envoi.",
+      },
+    ],
+
+    exceptions: [
+      {
+        id: "ex12",
+        whatCanGoWrong: "Aucun créneau commun trouvé dans les 5 jours ouvrés",
+        howDetected: "Algorithme de matching ne retourne aucun résultat",
+        whatHappensNext: "Alerte au recruteur pour élargir la fenêtre ou proposer des alternatives (soir, autre manager).",
+        whoIsNotified: "Recruteur",
+        dataPreserved: "Calendriers consultés, contraintes appliquées, plage recherchée",
+        severity: "low",
+      },
+      {
+        id: "ex13",
+        whatCanGoWrong: "Candidat ne répond pas dans les 48h",
+        howDetected: "Pas de sélection de créneau après 48h",
+        whatHappensNext: "Rappel automatique envoyé. Si pas de réponse après 72h supplémentaires, notification au recruteur.",
+        whoIsNotified: "Recruteur (après 5 jours sans réponse)",
+        dataPreserved: "Historique des notifications, créneaux proposés, statut candidat",
+        severity: "low",
+      },
+      {
+        id: "ex14",
+        whatCanGoWrong: "Conflit de calendrier de dernière minute (manager annule)",
+        howDetected: "Changement détecté dans le calendrier Outlook après confirmation",
+        whatHappensNext: "Notification au recruteur et au candidat. Proposition automatique de nouveaux créneaux.",
+        whoIsNotified: "Recruteur, candidat, hiring manager",
+        dataPreserved: "Entretien original, raison du conflit, nouveaux créneaux proposés",
+        severity: "medium",
+      },
+    ],
+
+    comparison: {
+      before: {
+        steps: 5,
+        humanEffort: "~20 minutes par entretien planifié (emails, vérifications calendrier, création invitation)",
+        toolsInvolved: ["Outlook", "Workday", "Teams", "Email"],
+        errorRisks: [
+          "Doubles réservations (calendrier non à jour)",
+          "Oubli de rappel au candidat",
+          "Délai de planification dépassé",
+          "Lien Teams oublié dans l'invitation",
+        ],
+      },
+      after: {
+        steps: 2,
+        automationCheckpoints: [
+          "Vérification automatique des disponibilités",
+          "Lien de réservation self-service",
+          "Création automatique d'événement Teams",
+          "Rappels programmés",
+        ],
+        humanTouchpoints: [
+          "Choix du panel d'entretien",
+          "Gestion des cas exceptionnels",
+        ],
+        residualRisks: [
+          "Calendrier Outlook non à jour",
+          "Candidat préfère un canal de communication différent",
+        ],
+      },
+    },
+
+    valueMetrics: [
+      { metric: "Valeur métier", level: "medium", explanation: "Élimine 90% des emails de coordination et réduit le délai de planification de 5 jours à quelques heures.", assumptions: "Basé sur 50 entretiens/mois avec 5-10 emails de coordination chacun." },
+      { metric: "Complexité de mise en œuvre", level: "low", explanation: "Utilise des outils Microsoft existants (Graph API, Bookings). Intégration standard.", assumptions: "Licence Microsoft 365 Business avec Bookings inclus." },
+      { metric: "Niveau de risque", level: "low", explanation: "Aucun risque opérationnel majeur — le pire cas est un retour à la coordination manuelle.", assumptions: "API Microsoft Graph stable et documentée." },
+      { metric: "Impact sur le changement", level: "low", explanation: "Les recruteurs gagnent du temps sans changer fondamentalement leur processus. Adoption rapide attendue.", assumptions: "Formation de 2h suffisante pour l'ensemble de l'équipe." },
+    ],
+
+    traceabilityLinks: [
+      { type: "process_step", name: "Planifier entretien", detail: "Étape de coordination manuelle remplacée par self-service" },
+      { type: "process_step", name: "Envoyer rappel", detail: "Rappels manuels remplacés par automatisation" },
+      { type: "role", name: "Recruteur", detail: "Libéré de la coordination logistique" },
+      { type: "role", name: "Hiring Manager", detail: "Reçoit l'invitation automatiquement" },
+      { type: "tool", name: "Microsoft Graph API", detail: "API d'accès aux calendriers Outlook" },
+      { type: "tool", name: "Microsoft Bookings", detail: "Self-service de réservation pour les candidats" },
+      { type: "tool", name: "Microsoft Teams", detail: "Plateforme vidéo pour les entretiens" },
+      { type: "business_rule", name: "Délai 5 jours ouvrés", detail: "SLA de planification d'entretien" },
+    ],
+
+    decisions: [],
+    comments: [
+      {
+        id: "com6",
+        user: "Amélie Durand (Recruteuse senior)",
+        timestamp: "2026-02-16T11:00:00",
+        text: "C'est exactement ce dont on a besoin. Je passe littéralement des heures à envoyer des emails de coordination. Question : est-ce que les candidats qui n'ont pas Outlook pourront quand même choisir un créneau ?",
+      },
+      {
+        id: "com7",
+        user: "Marc Lefebvre (IT)",
+        timestamp: "2026-02-16T14:15:00",
+        text: "Oui, le lien Bookings fonctionne dans n'importe quel navigateur, pas besoin d'Outlook. Le candidat voit les créneaux disponibles et clique pour réserver. C'est compatible mobile aussi.",
+      },
+    ],
+  },
 };
 
 // ========== Variant Mock Data ==========
@@ -962,6 +1377,36 @@ export const mockVariants: Record<string, MockVariant[]> = {
       cons: ["Configuration SAP complexe", "Coût de licence", "Moins flexible"],
       estimated_cost: "20 000 – 40 000 €",
       estimated_timeline: "4-6 semaines",
+      recommended: false,
+    },
+  ],
+  uc4: [
+    {
+      variant_number: 1,
+      variant_name: "RPA planification",
+      approach_description: "Robot RPA qui scanne quotidiennement les factures approuvées dans SAP, les regroupe par conditions de paiement et génère un fichier batch pour validation par la trésorerie.",
+      complexity: "medium",
+      impact: "medium",
+      roi_estimate: "Capture systématique des remises 2/10 net 30",
+      tools_suggested: ["UiPath", "SAP ERP", "Excel"],
+      pros: ["Automatisation de la routine quotidienne", "Optimisation des remises de paiement", "Faible risque"],
+      cons: ["Nécessite une plateforme RPA", "Maintenance du bot", "Pas d'optimisation de trésorerie avancée"],
+      estimated_cost: "15 000 – 30 000 €",
+      estimated_timeline: "3-4 semaines",
+      recommended: true,
+    },
+    {
+      variant_number: 2,
+      variant_name: "Module SAP Payment",
+      approach_description: "Configuration du module de paiement automatique SAP (F110) avec règles de planification avancées et intégration bancaire directe.",
+      complexity: "high",
+      impact: "high",
+      roi_estimate: "Réduction de 80% du temps + optimisation trésorerie",
+      tools_suggested: ["SAP F110", "SAP Bank Communication", "SAP Fiori"],
+      pros: ["Intégration native SAP", "Paiement direct bancaire", "Traçabilité complète", "Gestion multi-devises"],
+      cons: ["Configuration complexe", "Coût de consulting SAP élevé", "Risque de migration"],
+      estimated_cost: "50 000 – 90 000 €",
+      estimated_timeline: "2-3 mois",
       recommended: false,
     },
   ],
