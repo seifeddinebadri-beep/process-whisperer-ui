@@ -1,54 +1,79 @@
 
 
-## Plan: Refonte UX de la vue de fusion des étapes
+## Plan: Variantes d'automatisation multiples + Export PDF
 
-### Problème actuel
-La vue de comparaison est trop basique : deux colonnes côte-à-côte avec de simples boutons Accept/Skip. Pas de contexte sur les différences, pas de gestion des exceptions (étapes similaires entre sources, étapes conflictuelles, étapes uniques à une source), et pas de prévisualisation du résultat fusionné.
+### Objectif
+Chaque cas d'usage d'automatisation génère plusieurs variantes (ex: Variante 1 = RPA simple, Variante 2 = IA + OCR, Variante 3 = Full automation) avec un export PDF professionnel.
 
-### Nouvelle architecture UX
+### Architecture
 
 ```text
-StepComparisonView (refonte complète)
-├── Header avec stats et légende des couleurs
-├── Section 1 : Étapes similaires (auto-détectées par nom/description)
-│   └── Ligne par paire : EL à gauche, KB à droite, bouton "Garder EL / Garder KB / Fusionner"
-├── Section 2 : Étapes uniques Event Log (pas d'équivalent KB)
-│   └── Chaque étape avec Accept/Skip
-├── Section 3 : Étapes uniques KB (pas d'équivalent EL)
-│   └── Chaque étape avec Accept/Skip
-├── Section 4 : Prévisualisation du résultat fusionné (live)
-│   └── Liste ordonnée des étapes acceptées avec badges source
-└── Footer : barre de progression + bouton "Valider la fusion"
+automation_use_cases (existing)
+  └── automation_variants (new table)
+       ├── variant_number (1, 2, 3...)
+       ├── variant_name ("RPA Simple", "IA + OCR", "Full Automation")
+       ├── approach_description
+       ├── complexity, impact, roi_estimate
+       ├── tools_suggested[]
+       ├── pros[], cons[]
+       ├── estimated_cost, estimated_timeline
+       └── recommended (boolean)
 ```
 
-### Implémentation
+### Implementation
 
-1. **Algorithme de matching des étapes similaires**
-   - Comparaison par mots-clés dans `name` et `description` (simple similarity basée sur mots communs)
-   - Classement en 3 catégories : `paired` (similaires), `uniqueEL` (event log only), `uniqueKB` (KB only)
-   - Mock data : enrichir les données pour illustrer les 3 cas
+**1. Database: `automation_variants` table**
+- New table linked to `automation_use_cases` via `use_case_id`
+- Fields: variant_number, variant_name, approach_description, complexity, impact, roi_estimate, tools_suggested, pros, cons, estimated_cost, estimated_timeline, recommended (boolean)
+- RLS policies matching existing `automation_use_cases` access
 
-2. **Refonte `StepComparisonView.tsx`**
-   - **Paired steps** : affichage côte-à-côte avec highlight des différences (champs qui diffèrent en orange). Actions : "Garder gauche", "Garder droite", ou "Combiner" (prend le meilleur des deux : description la plus longue, union des pain points, etc.)
-   - **Unique steps** : affichage en pleine largeur avec Accept/Skip
-   - **Live preview** : section en bas qui montre le résultat en temps réel avec numérotation et badges source
-   - **Progress bar** : pourcentage de décisions prises
-   - **Gestion des exceptions** : 
-     - Étapes avec `businessRules` conflictuelles → warning icon + tooltip
-     - Étapes avec `decisionType` différent → highlight orange
-     - Étapes sans description → badge "Incomplet"
+**2. Update `analyze-process` edge function**
+- Modify the AI tool call schema to generate 2-3 variants per use case instead of flat use cases
+- Each use case now produces variants with different automation approaches (e.g., lightweight RPA vs. AI-powered vs. full integration)
+- Insert variants into the new table after inserting the parent use case
 
-3. **Enrichir les mock data** (`mockComparisonSteps.ts`)
-   - Ajouter des étapes qui matchent entre EL et KB (réception facture ↔ collecte factures)
-   - Ajouter une étape KB sans équivalent EL (vérification conformité)
-   - Ajouter une étape EL sans équivalent KB (paiement)
+**3. Update `AutomationDiscovery` page**
+- Each use case card shows a "X variants" badge
+- Clicking navigates to the detail page which now has a variant selector
 
-4. **Nouvelles traductions i18n**
-   - Sections : "Étapes similaires", "Uniques Event Log", "Uniques KB", "Aperçu du résultat"
-   - Actions : "Garder", "Combiner", "Incomplet", "Conflit détecté"
+**4. Update `UseCaseDetail` page**
+- Add a horizontal tab bar or segmented control for variants ("Variante 1: RPA", "Variante 2: IA+OCR", etc.)
+- Recommended variant gets a star icon
+- Each variant tab shows its own scope, steps, tools, ROI, pros/cons
+- Comparison table at the bottom: all variants side-by-side on key metrics
 
-### Fichiers à modifier
-- `src/components/process-analysis/StepComparisonView.tsx` — refonte complète
-- `src/data/mockComparisonSteps.ts` — enrichir pour couvrir les 3 cas
-- `src/lib/i18n.tsx` — nouvelles traductions
+**5. PDF Export (`generate-pdf` edge function)**
+- New edge function that builds an HTML template → converts to PDF using Deno's built-in capabilities
+- Template includes: use case title, all variants with their details, comparison table, traceability links
+- Professional layout with logo placeholder, headers, tables, color-coded badges
+- Called from a "Download PDF" button on the detail page
+
+**6. PDF Template structure**
+```text
+Page 1: Cover — Use Case Title, Process, Date, Department
+Page 2: Executive Summary — all variants compared in a table
+Page 3+: Per-variant detail pages
+  - Approach description
+  - Tools & technologies
+  - Pros / Cons
+  - ROI estimate, cost, timeline
+  - Steps to automate / remain manual
+Last page: Recommendation with justification
+```
+
+**7. Mock data for immediate UX testing**
+- Populate `useCaseDetailData.ts` with 3 example variants per mock use case
+- PDF export works with both DB data and mock data
+
+**8. i18n translations**
+- Variant labels, comparison headers, PDF button, pros/cons headers
+
+### Files to create/edit
+- `supabase/migrations/` — create `automation_variants` table
+- `supabase/functions/analyze-process/index.ts` — generate variants per use case
+- `supabase/functions/generate-variant-pdf/index.ts` (new) — HTML-to-PDF generation
+- `src/pages/AutomationDiscovery.tsx` — show variant count per card
+- `src/pages/UseCaseDetail.tsx` — variant tabs + comparison table + PDF button
+- `src/data/useCaseDetailData.ts` — mock variant data
+- `src/lib/i18n.tsx` — new translations
 
