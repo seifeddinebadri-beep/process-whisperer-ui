@@ -76,8 +76,8 @@ const UseCaseDetail = () => {
     enabled: !!id,
   });
 
-  // Fallback to mock data if DB returns nothing
-  const mockUc = id ? mockDiscoveryData.find((m) => m.id === id) : undefined;
+  // Fallback to mock data if DB returns nothing — use first mock as default for unknown IDs
+  const mockUc = id ? (mockDiscoveryData.find((m) => m.id === id) || mockDiscoveryData[0]) : undefined;
   const useCase = dbUseCase || (mockUc ? {
     ...mockUc,
     uploaded_processes: mockUc.uploaded_processes as any,
@@ -115,9 +115,12 @@ const UseCaseDetail = () => {
         estimated_timeline: v.estimated_timeline || "—",
         recommended: v.recommended || false,
       }))
-    : (id && mockVariants[id]) ? mockVariants[id] : [];
+    : (id && mockVariants[id]) ? mockVariants[id]
+    : (Object.keys(mockVariants).length > 0) ? mockVariants["uc1"] || Object.values(mockVariants)[0]
+    : [];
 
-  const detail = id ? mockUseCaseDetails[id] : undefined;
+  // Fallback detail to uc1 if no match
+  const detail = id ? (mockUseCaseDetails[id] || mockUseCaseDetails["uc1"]) : mockUseCaseDetails["uc1"];
 
   const handleDownloadPdf = async () => {
     if (!useCase) return;
