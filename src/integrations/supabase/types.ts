@@ -123,6 +123,68 @@ export type Database = {
           },
         ]
       }
+      automation_variants: {
+        Row: {
+          approach_description: string | null
+          complexity: string | null
+          cons: string[] | null
+          created_at: string
+          estimated_cost: string | null
+          estimated_timeline: string | null
+          id: string
+          impact: string | null
+          pros: string[] | null
+          recommended: boolean
+          roi_estimate: string | null
+          tools_suggested: string[] | null
+          use_case_id: string
+          variant_name: string
+          variant_number: number
+        }
+        Insert: {
+          approach_description?: string | null
+          complexity?: string | null
+          cons?: string[] | null
+          created_at?: string
+          estimated_cost?: string | null
+          estimated_timeline?: string | null
+          id?: string
+          impact?: string | null
+          pros?: string[] | null
+          recommended?: boolean
+          roi_estimate?: string | null
+          tools_suggested?: string[] | null
+          use_case_id: string
+          variant_name: string
+          variant_number?: number
+        }
+        Update: {
+          approach_description?: string | null
+          complexity?: string | null
+          cons?: string[] | null
+          created_at?: string
+          estimated_cost?: string | null
+          estimated_timeline?: string | null
+          id?: string
+          impact?: string | null
+          pros?: string[] | null
+          recommended?: boolean
+          roi_estimate?: string | null
+          tools_suggested?: string[] | null
+          use_case_id?: string
+          variant_name?: string
+          variant_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_variants_use_case_id_fkey"
+            columns: ["use_case_id"]
+            isOneToOne: false
+            referencedRelation: "automation_use_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           created_at: string

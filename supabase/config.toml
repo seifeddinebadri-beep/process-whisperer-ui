@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.analyze-process]
 verify_jwt = false
+
+[functions.generate-variant-pdf]
+verify_jwt = false
