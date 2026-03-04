@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X, FileText } from "lucide-react";
+import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X, FileText, ArrowUpDown, Clock } from "lucide-react";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -31,6 +33,7 @@ const AutomationDiscovery = () => {
   const [filterComplexity, setFilterComplexity] = useState("all");
   const [filterProcess, setFilterProcess] = useState("all");
   const [filterDetailed, setFilterDetailed] = useState("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title_asc" | "title_desc" | "impact">("newest");
 
   const deleteUseCase = async (ucId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -109,7 +112,7 @@ const AutomationDiscovery = () => {
 
   // Apply filters
   const filteredUseCases = useMemo(() => {
-    return useCases.filter((uc: any) => {
+    const filtered = useCases.filter((uc: any) => {
       if (filterSearch && !uc.title.toLowerCase().includes(filterSearch.toLowerCase()) && !(uc.description || "").toLowerCase().includes(filterSearch.toLowerCase())) return false;
       if (filterImpact !== "all" && uc.impact !== filterImpact) return false;
       if (filterComplexity !== "all" && uc.complexity !== filterComplexity) return false;
@@ -118,11 +121,26 @@ const AutomationDiscovery = () => {
       if (filterDetailed === "no" && hasDetail(uc.id)) return false;
       return true;
     });
-  }, [useCases, filterSearch, filterImpact, filterComplexity, filterProcess, filterDetailed, detailIds]);
 
-  const activeFilterCount = [filterSearch, filterImpact !== "all", filterComplexity !== "all", filterProcess !== "all", filterDetailed !== "all"].filter(Boolean).length;
+    // Sort
+    const impactOrder: Record<string, number> = { high: 3, medium: 2, low: 1 };
+    filtered.sort((a: any, b: any) => {
+      switch (sortBy) {
+        case "newest": return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case "oldest": return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case "title_asc": return a.title.localeCompare(b.title);
+        case "title_desc": return b.title.localeCompare(a.title);
+        case "impact": return (impactOrder[b.impact] || 0) - (impactOrder[a.impact] || 0);
+        default: return 0;
+      }
+    });
 
-  const clearFilters = () => { setFilterSearch(""); setFilterImpact("all"); setFilterComplexity("all"); setFilterProcess("all"); setFilterDetailed("all"); };
+    return filtered;
+  }, [useCases, filterSearch, filterImpact, filterComplexity, filterProcess, filterDetailed, detailIds, sortBy]);
+
+  const activeFilterCount = [filterSearch, filterImpact !== "all", filterComplexity !== "all", filterProcess !== "all", filterDetailed !== "all", sortBy !== "newest"].filter(Boolean).length;
+
+  const clearFilters = () => { setFilterSearch(""); setFilterImpact("all"); setFilterComplexity("all"); setFilterProcess("all"); setFilterDetailed("all"); setSortBy("newest"); };
 
   if (isLoading) {
     return (
@@ -179,6 +197,19 @@ const AutomationDiscovery = () => {
                 <SelectItem value="all">Tous</SelectItem>
                 <SelectItem value="yes">✨ Détaillé</SelectItem>
                 <SelectItem value="no">Non détaillé</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+              <SelectTrigger className="w-[160px] h-9 text-sm">
+                <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
+                <SelectValue placeholder="Trier par" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Plus récent</SelectItem>
+                <SelectItem value="oldest">Plus ancien</SelectItem>
+                <SelectItem value="title_asc">Titre A→Z</SelectItem>
+                <SelectItem value="title_desc">Titre Z→A</SelectItem>
+                <SelectItem value="impact">Impact ↓</SelectItem>
               </SelectContent>
             </Select>
             {activeFilterCount > 0 && (
@@ -247,6 +278,10 @@ const AutomationDiscovery = () => {
                       )}
                     </div>
                     <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {format(new Date(uc.created_at), "dd MMM yyyy · HH:mm", { locale: fr })}
+                      </span>
                       <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">{t.discovery.viewDetails}</Button>
                       <Button
                         variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
@@ -272,12 +307,13 @@ const AutomationDiscovery = () => {
                     <TableHead>Processus</TableHead>
                     <TableHead>{t.discovery.potential}</TableHead>
                     <TableHead>Complexité</TableHead>
+                    <TableHead>Créé le</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredUseCases.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-8">Aucun résultat</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-8">Aucun résultat</TableCell></TableRow>
                   ) : filteredUseCases.map((uc: any) => (
                     <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                       <TableCell className="font-medium text-sm">
@@ -295,6 +331,9 @@ const AutomationDiscovery = () => {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs capitalize">{uc.complexity || "—"}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {format(new Date(uc.created_at), "dd MMM yyyy · HH:mm", { locale: fr })}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
