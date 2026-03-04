@@ -52,6 +52,237 @@ function buildContext(processRes: any, stepsRes: any, contextRes: any, chunksRes
   return parts.join("\n");
 }
 
+const detailToolSchema = {
+  type: "function",
+  function: {
+    name: "store_use_case_detail",
+    description: "Store the detailed enriched content for an automation use case",
+    parameters: {
+      type: "object",
+      properties: {
+        detectionSignals: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              type: { type: "string", enum: ["repetitive_manual", "rule_based", "high_frequency", "structured_inputs", "tool_transfer"] },
+              label: { type: "string" },
+              description: { type: "string" },
+              triggeringStep: { type: "string" },
+              ruleOrThreshold: { type: "string" },
+            },
+            required: ["id", "type", "label", "description", "triggeringStep", "ruleOrThreshold"],
+            additionalProperties: false,
+          },
+        },
+        contextReferences: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              type: { type: "string", enum: ["role", "tool", "business_rule", "constraint"] },
+              name: { type: "string" },
+              detail: { type: "string" },
+            },
+            required: ["id", "type", "name", "detail"],
+            additionalProperties: false,
+          },
+        },
+        confidenceLevel: { type: "string", enum: ["low", "medium", "high"] },
+        confidenceExplanation: { type: "string" },
+        willBeAutomated: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              step: { type: "string" },
+              system: { type: "string" },
+              decision: { type: "string" },
+            },
+            required: ["step"],
+            additionalProperties: false,
+          },
+        },
+        willRemainManual: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              item: { type: "string" },
+              reason: { type: "string" },
+            },
+            required: ["item", "reason"],
+            additionalProperties: false,
+          },
+        },
+        explicitExclusions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              scenario: { type: "string" },
+              reason: { type: "string" },
+            },
+            required: ["scenario", "reason"],
+            additionalProperties: false,
+          },
+        },
+        detailedSteps: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              stepName: { type: "string" },
+              trigger: { type: "string" },
+              inputData: { type: "array", items: { type: "string" } },
+              validationRules: { type: "array", items: { type: "string" } },
+              systemAction: { type: "string" },
+              outputProduced: { type: "string" },
+              logging: { type: "string" },
+            },
+            required: ["id", "stepName", "trigger", "inputData", "validationRules", "systemAction", "outputProduced", "logging"],
+            additionalProperties: false,
+          },
+        },
+        exceptions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              whatCanGoWrong: { type: "string" },
+              howDetected: { type: "string" },
+              whatHappensNext: { type: "string" },
+              whoIsNotified: { type: "string" },
+              dataPreserved: { type: "string" },
+              severity: { type: "string", enum: ["low", "medium", "high"] },
+            },
+            required: ["id", "whatCanGoWrong", "howDetected", "whatHappensNext", "whoIsNotified", "dataPreserved", "severity"],
+            additionalProperties: false,
+          },
+        },
+        comparison: {
+          type: "object",
+          properties: {
+            before: {
+              type: "object",
+              properties: {
+                steps: { type: "number" },
+                humanEffort: { type: "string" },
+                toolsInvolved: { type: "array", items: { type: "string" } },
+                errorRisks: { type: "array", items: { type: "string" } },
+              },
+              required: ["steps", "humanEffort", "toolsInvolved", "errorRisks"],
+              additionalProperties: false,
+            },
+            after: {
+              type: "object",
+              properties: {
+                steps: { type: "number" },
+                automationCheckpoints: { type: "array", items: { type: "string" } },
+                humanTouchpoints: { type: "array", items: { type: "string" } },
+                residualRisks: { type: "array", items: { type: "string" } },
+              },
+              required: ["steps", "automationCheckpoints", "humanTouchpoints", "residualRisks"],
+              additionalProperties: false,
+            },
+          },
+          required: ["before", "after"],
+          additionalProperties: false,
+        },
+        valueMetrics: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              metric: { type: "string" },
+              level: { type: "string", enum: ["low", "medium", "high"] },
+              explanation: { type: "string" },
+              assumptions: { type: "string" },
+            },
+            required: ["metric", "level", "explanation", "assumptions"],
+            additionalProperties: false,
+          },
+        },
+        traceabilityLinks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["process_step", "role", "tool", "business_rule"] },
+              name: { type: "string" },
+              detail: { type: "string" },
+            },
+            required: ["type", "name", "detail"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: [
+        "detectionSignals", "contextReferences", "confidenceLevel", "confidenceExplanation",
+        "willBeAutomated", "willRemainManual", "explicitExclusions",
+        "detailedSteps", "exceptions", "comparison", "valueMetrics", "traceabilityLinks",
+      ],
+      additionalProperties: false,
+    },
+  },
+};
+
+async function generateUseCaseDetail(
+  apiKey: string,
+  fullContext: string,
+  ucTitle: string,
+  ucDescription: string,
+): Promise<any> {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Tu es un expert en automatisation de processus métier. " +
+            "Pour le cas d'usage d'automatisation donné, génère un contenu détaillé et enrichi couvrant toutes les sections suivantes : " +
+            "signaux de détection (pourquoi cette automatisation a été détectée), références de contexte, niveau de confiance, " +
+            "périmètre (ce qui sera automatisé, ce qui restera manuel, exclusions explicites), " +
+            "étapes détaillées du processus automatisé (trigger, données d'entrée, règles de validation, action système, sortie, logging), " +
+            "scénarios d'exception (ce qui peut mal tourner, comment c'est détecté, que se passe-t-il ensuite, qui est notifié, données préservées), " +
+            "comparaison avant/après (nombre d'étapes, effort humain, outils, risques), " +
+            "métriques de valeur (business value, complexité, risque, impact changement), " +
+            "et liens de traçabilité vers les étapes, rôles, outils et règles métier du processus. " +
+            "Génère du contenu réaliste, spécifique et professionnel basé sur le contexte du processus. " +
+            "Retourne tes résultats UNIQUEMENT via l'appel de fonction fourni.",
+        },
+        {
+          role: "user",
+          content:
+            `Cas d'usage : "${ucTitle}"\nDescription : ${ucDescription}\n\nContexte du processus :\n${fullContext}`,
+        },
+      ],
+      tools: [detailToolSchema],
+      tool_choice: { type: "function", function: { name: "store_use_case_detail" } },
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`AI detail error [${response.status}]: ${errText}`);
+  }
+
+  const data = await response.json();
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall) throw new Error("No tool call in detail AI response");
+  return JSON.parse(toolCall.function.arguments);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -151,17 +382,17 @@ serve(async (req) => {
                           items: {
                             type: "object",
                             properties: {
-                              variant_name: { type: "string", description: "Nom court de la variante (ex: 'RPA Simple', 'IA + OCR')" },
-                              approach_description: { type: "string", description: "Description détaillée de l'approche" },
+                              variant_name: { type: "string" },
+                              approach_description: { type: "string" },
                               complexity: { type: "string", enum: ["low", "medium", "high"] },
                               impact: { type: "string", enum: ["low", "medium", "high"] },
                               roi_estimate: { type: "string" },
                               tools_suggested: { type: "array", items: { type: "string" } },
-                              pros: { type: "array", items: { type: "string" }, description: "Avantages de cette variante" },
-                              cons: { type: "array", items: { type: "string" }, description: "Inconvénients de cette variante" },
-                              estimated_cost: { type: "string", description: "Estimation du coût (ex: '5k-15k €')" },
-                              estimated_timeline: { type: "string", description: "Estimation du délai (ex: '2-4 semaines')" },
-                              recommended: { type: "boolean", description: "True si cette variante est recommandée" },
+                              pros: { type: "array", items: { type: "string" } },
+                              cons: { type: "array", items: { type: "string" } },
+                              estimated_cost: { type: "string" },
+                              estimated_timeline: { type: "string" },
+                              recommended: { type: "boolean" },
                             },
                             required: ["variant_name", "approach_description", "complexity", "impact", "roi_estimate", "tools_suggested", "pros", "cons", "estimated_cost", "estimated_timeline", "recommended"],
                             additionalProperties: false,
@@ -210,12 +441,15 @@ serve(async (req) => {
     const { data: existingUCs } = await supabase.from("automation_use_cases").select("id").eq("process_id", process_id);
     if (existingUCs && existingUCs.length > 0) {
       const ucIds = existingUCs.map((uc: any) => uc.id);
+      await supabase.from("use_case_details").delete().in("use_case_id", ucIds);
       await supabase.from("automation_variants").delete().in("use_case_id", ucIds);
     }
     await supabase.from("automation_use_cases").delete().eq("process_id", process_id);
 
     // Insert use cases and their variants
     let totalVariants = 0;
+    const insertedUseCases: Array<{ id: string; title: string; description: string }> = [];
+
     for (const uc of use_cases) {
       const { data: inserted, error: insertError } = await supabase
         .from("automation_use_cases")
@@ -235,6 +469,8 @@ serve(async (req) => {
         console.error("Failed to insert use case:", insertError);
         continue;
       }
+
+      insertedUseCases.push({ id: inserted.id, title: uc.title, description: uc.description || "" });
 
       // Insert variants
       if (uc.variants && Array.isArray(uc.variants)) {
@@ -260,14 +496,50 @@ serve(async (req) => {
       }
     }
 
+    // ===== PHASE 2: Generate detailed content for each use case =====
+    await supabase.from("agent_logs").insert({
+      process_id, agent_name: "discoverer", action: "generate_details", status: "started",
+      message: `Generating detailed content for ${insertedUseCases.length} use cases...`,
+    });
+
+    let detailsGenerated = 0;
+    for (const uc of insertedUseCases) {
+      try {
+        const detailContent = await generateUseCaseDetail(
+          LOVABLE_API_KEY,
+          fullContext,
+          uc.title,
+          uc.description,
+        );
+
+        const { error: detailError } = await supabase.from("use_case_details").insert({
+          use_case_id: uc.id,
+          detail_content: detailContent,
+        });
+
+        if (detailError) {
+          console.error(`Failed to insert detail for ${uc.title}:`, detailError);
+        } else {
+          detailsGenerated++;
+        }
+      } catch (err) {
+        console.error(`Error generating detail for ${uc.title}:`, err);
+      }
+    }
+
+    await supabase.from("agent_logs").insert({
+      process_id, agent_name: "discoverer", action: "generate_details", status: "completed",
+      message: `Generated detailed content for ${detailsGenerated}/${insertedUseCases.length} use cases.`,
+    });
+
     // Update process status
     await supabase.from("uploaded_processes").update({ status: "approved" }).eq("id", process_id);
 
     // Log completion
     await supabase.from("agent_logs").insert({
       process_id, agent_name: "discoverer", action: "analyze_use_cases", status: "completed",
-      message: `Generated ${use_cases.length} use cases with ${totalVariants} variants.`,
-      metadata: { use_cases_count: use_cases.length, variants_count: totalVariants },
+      message: `Generated ${use_cases.length} use cases with ${totalVariants} variants and ${detailsGenerated} detail pages.`,
+      metadata: { use_cases_count: use_cases.length, variants_count: totalVariants, details_count: detailsGenerated },
     });
 
     return new Response(
@@ -275,6 +547,7 @@ serve(async (req) => {
         success: true,
         use_cases_count: use_cases.length,
         variants_count: totalVariants,
+        details_count: detailsGenerated,
         use_cases,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
