@@ -140,11 +140,27 @@ const UseCaseDetail = () => {
 
   // Use DB detail when available, fall back to mock for legacy mock IDs (uc1-uc7)
   const mockIds = ["uc1", "uc2", "uc3", "uc4", "uc5", "uc6", "uc7"];
-  const detail = dbDetail
-    ? { ...dbDetail, useCaseId: id }
+  const defaultDetail = {
+    detectionSignals: [],
+    contextReferences: [],
+    willBeAutomated: [],
+    willRemainManual: [],
+    explicitExclusions: [],
+    detailedSteps: [],
+    exceptions: [],
+    comparison: { before: { steps: 0, humanEffort: "—", toolsInvolved: [], errorRisks: [] }, after: { steps: 0, automationCheckpoints: [], gains: [] } },
+    traceabilityLinks: [],
+    decisions: [],
+    comments: [],
+    confidenceLevel: "medium" as const,
+    confidenceExplanation: "",
+  };
+  const rawDetail = dbDetail
+    ? { ...defaultDetail, ...dbDetail, useCaseId: id }
     : (id && mockIds.includes(id))
       ? mockUseCaseDetails[id]
       : mockUseCaseDetails["uc1"];
+  const detail = rawDetail ? { ...defaultDetail, ...rawDetail } : null;
 
   const handleDownloadPdf = async () => {
     if (!useCase) return;
