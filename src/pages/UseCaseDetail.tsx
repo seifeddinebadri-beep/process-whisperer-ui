@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { mockUseCaseDetails, TraceabilityLink, mockVariants, type MockVariant } from "@/data/useCaseDetailData";
 import { mockUseCases as mockDiscoveryData } from "@/data/mockAutomationDiscoveryData";
+import VariantRadarChart from "@/components/process-analysis/VariantRadarChart";
 import { useLang } from "@/lib/i18n";
 import { toast } from "sonner";
 
@@ -422,6 +423,19 @@ const UseCaseDetail = () => {
                   </TableRow>
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== RADAR CHART ===== */}
+        {variants.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Comparaison visuelle des variantes</CardTitle>
+              <CardDescription>Radar sur 5 axes : coût, complexité, ROI, risque et délai (score élevé = meilleur)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <VariantRadarChart variants={variants} />
             </CardContent>
           </Card>
         )}
