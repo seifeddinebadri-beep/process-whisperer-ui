@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X } from "lucide-react";
+import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X, FileText } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -76,6 +76,20 @@ const AutomationDiscovery = () => {
       return new Set((data || []).map((d: any) => d.use_case_id));
     },
   });
+
+  // Check which use cases have PDDs
+  const { data: pddIds } = useQuery({
+    queryKey: ["use-case-pdd-ids"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pdd_documents")
+        .select("use_case_id");
+      if (error) throw error;
+      return new Set((data || []).map((d: any) => d.use_case_id));
+    },
+  });
+
+  const hasPdd = (ucId: string) => pddIds?.has(ucId) ?? false;
 
   const hasDetail = (ucId: string) => detailIds?.has(ucId) ?? false;
 
@@ -196,6 +210,11 @@ const AutomationDiscovery = () => {
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
                       <div className="flex items-center gap-1.5">
+                        {hasPdd(uc.id) && (
+                          <Badge variant="outline" className="text-xs gap-1 border-green-500/30 text-green-700">
+                            <FileText className="h-3 w-3" /> PDD
+                          </Badge>
+                        )}
                         {hasDetail(uc.id) && (
                           <Badge variant="outline" className="text-xs gap-1 border-primary/30 text-primary">
                             <Sparkles className="h-3 w-3" /> Détaillé
@@ -264,6 +283,7 @@ const AutomationDiscovery = () => {
                       <TableCell className="font-medium text-sm">
                         <span className="flex items-center gap-1.5">
                           {uc.title}
+                          {hasPdd(uc.id) && <FileText className="h-3.5 w-3.5 text-green-600 shrink-0" />}
                           {hasDetail(uc.id) && <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />}
                         </span>
                       </TableCell>
