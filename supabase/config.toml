@@ -20,3 +20,12 @@ verify_jwt = false
 
 [functions.generate-pdd]
 verify_jwt = false
+
+[functions.agent-orchestrator]
+verify_jwt = false
+
+[functions.agent-analyze-as-is]
+verify_jwt = false
+
+[functions.agent-clarify]
+verify_jwt = false
