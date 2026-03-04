@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,8 @@ import {
 } from "@/data/mockClarificationData";
 import type { ProcessContext } from "./types";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface ClarificationPanelProps {
   open: boolean;
@@ -34,6 +36,36 @@ export function ClarificationPanel({
   );
   const [currentStep, setCurrentStep] = useState(0);
   const [isApplying, setIsApplying] = useState(false);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+
+  // Fetch AI-generated questions when panel opens
+  useEffect(() => {
+    if (open && processId) {
+      setIsLoadingQuestions(true);
+      supabase.functions.invoke("generate-clarifications", {
+        body: { process_id: processId },
+      }).then(({ data, error }) => {
+        if (!error && data?.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+          setQuestions(data.questions.map((q: any) => ({
+            ...q,
+            allowOther: true,
+            selectedOption: undefined,
+            customAnswer: undefined,
+          })));
+          setCurrentStep(0);
+        } else {
+          // Fallback to mock questions
+          console.warn("Using fallback clarification questions:", error);
+          setQuestions(mockClarificationQuestions.map((q) => ({ ...q })));
+        }
+      }).catch((e) => {
+        console.error("generate-clarifications error:", e);
+        setQuestions(mockClarificationQuestions.map((q) => ({ ...q })));
+      }).finally(() => {
+        setIsLoadingQuestions(false);
+      });
+    }
+  }, [open, processId]);
 
   const totalSteps = questions.length;
   const currentQ = questions[currentStep];
@@ -117,6 +149,34 @@ export function ClarificationPanel({
   const getCategoryLabel = (cat: ClarificationCategory) =>
     lang === "fr" ? categoryLabels[cat].fr : categoryLabels[cat].en;
 
+  if (isLoadingQuestions) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full sm:max-w-lg p-0 flex flex-col">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bot className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{t.clarification.title}</SheetTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">{t.clarification.subtitle}</p>
+              </div>
+            </div>
+          </SheetHeader>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center space-y-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+              <p className="text-sm text-muted-foreground">
+                {lang === "fr" ? "Génération des questions par l'IA..." : "AI generating questions..."}
+              </p>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   if (!currentQ) return null;
 
   const isOtherSelected = currentQ.selectedOption === "__other__";
@@ -161,7 +221,7 @@ export function ClarificationPanel({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {lang === "fr" ? "Question" : "Question"} {currentStep + 1}/{totalSteps}
+              Question {currentStep + 1}/{totalSteps}
             </span>
             <span className="text-xs text-muted-foreground">
               {answeredCount} {lang === "fr" ? "répondue(s)" : "answered"}

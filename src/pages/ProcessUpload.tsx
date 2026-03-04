@@ -27,6 +27,7 @@ const ProcessUpload = () => {
   const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState("");
 
   // Fetch companies
   const { data: companies = [] } = useQuery({
@@ -111,6 +112,7 @@ const ProcessUpload = () => {
 
       setUploading(true);
       setUploadProgress(10);
+      setUploadStage("Uploading file...");
 
       // 1. Upload file to storage
       const filePath = `${crypto.randomUUID()}/${selectedFile.name}`;
@@ -119,7 +121,8 @@ const ProcessUpload = () => {
         .upload(filePath, selectedFile);
 
       if (storageError) throw storageError;
-      setUploadProgress(40);
+      setUploadProgress(25);
+      setUploadStage("Saving record...");
 
       // 2. Insert record in uploaded_processes
       const { data: process, error: insertError } = await supabase
@@ -138,7 +141,8 @@ const ProcessUpload = () => {
         .single();
 
       if (insertError) throw insertError;
-      setUploadProgress(60);
+      setUploadProgress(40);
+      setUploadStage("Parsing document...");
 
       // 3. Call parse-document edge function
       const { error: parseError } = await supabase.functions.invoke("parse-document", {
@@ -147,11 +151,11 @@ const ProcessUpload = () => {
 
       if (parseError) {
         console.error("parse-document error:", parseError);
-        // Don't throw — file is uploaded, parsing can be retried
-        toast({ title: "Parsing warning", description: "File uploaded but parsing encountered an issue. It can be retried.", variant: "destructive" });
+        toast({ title: "Parsing warning", description: "File uploaded but parsing encountered an issue.", variant: "destructive" });
       }
 
-      setUploadProgress(90);
+      setUploadProgress(60);
+      setUploadStage("Generating embeddings...");
 
       // 4. Trigger embeddings generation
       try {
@@ -162,12 +166,32 @@ const ProcessUpload = () => {
         console.error("generate-embeddings error:", e);
       }
 
+      setUploadProgress(80);
+      setUploadStage("Extracting process steps (AI)...");
+
+      // 5. Extract structured steps via LLM
+      try {
+        const { data: extractData, error: extractError } = await supabase.functions.invoke("extract-steps", {
+          body: { process_id: process.id },
+        });
+        if (extractError) {
+          console.error("extract-steps error:", extractError);
+          toast({ title: "Step extraction warning", description: "Steps could not be auto-extracted. You can add them manually.", variant: "destructive" });
+        } else {
+          console.log("extract-steps result:", extractData);
+        }
+      } catch (e) {
+        console.error("extract-steps error:", e);
+      }
+
       setUploadProgress(100);
+      setUploadStage("Complete!");
       return process;
     },
     onSuccess: () => {
       toast({ title: t.upload.contextAssigned, description: t.upload.readyForAnalysis });
       queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
+      queryClient.invalidateQueries({ queryKey: ["overview-processes"] });
       // Reset form
       setSelectedFile(null);
       setSelectedCompany("");
@@ -177,12 +201,14 @@ const ProcessUpload = () => {
       setNotes("");
       setUploading(false);
       setUploadProgress(0);
+      setUploadStage("");
     },
     onError: (error) => {
       console.error("Upload error:", error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
       setUploading(false);
       setUploadProgress(0);
+      setUploadStage("");
     },
   });
 
@@ -210,7 +236,7 @@ const ProcessUpload = () => {
             type="file"
             ref={fileInputRef}
             className="hidden"
-            accept=".csv,.txt"
+            accept=".csv,.txt,.json"
             onChange={handleFileChange}
           />
           <div
@@ -226,7 +252,7 @@ const ProcessUpload = () => {
             <p className="text-sm font-medium text-foreground">
               {selectedFile ? selectedFile.name : t.upload.dropHere}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">{t.upload.supports}</p>
+            <p className="text-xs text-muted-foreground mt-1">CSV, TXT, JSON</p>
           </div>
         </CardContent>
       </Card>
@@ -274,9 +300,7 @@ const ProcessUpload = () => {
             {uploading && (
               <div className="space-y-1">
                 <Progress value={uploadProgress} className="h-2" />
-                <p className="text-xs text-muted-foreground">
-                  {uploadProgress < 40 ? "Uploading file..." : uploadProgress < 60 ? "Saving record..." : uploadProgress < 90 ? "Parsing document..." : "Generating embeddings..."}
-                </p>
+                <p className="text-xs text-muted-foreground">{uploadStage}</p>
               </div>
             )}
 

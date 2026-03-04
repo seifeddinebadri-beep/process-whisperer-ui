@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronRight, Plus, Building2, ArrowLeft, Wrench, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useLang } from "@/lib/i18n";
@@ -17,7 +18,7 @@ import type { Tables } from "@/integrations/supabase/types";
 type View = "companies" | "departments" | "entities" | "activities";
 
 const KnowledgeBase = () => {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const queryClient = useQueryClient();
 
   const [view, setView] = useState<View>("companies");
@@ -30,6 +31,13 @@ const KnowledgeBase = () => {
   const [showAddDept, setShowAddDept] = useState(false);
   const [showAddEntity, setShowAddEntity] = useState(false);
   const [showAddActivity, setShowAddActivity] = useState(false);
+  const [showAddTool, setShowAddTool] = useState(false);
+
+  // Tool form state
+  const [toolName, setToolName] = useState("");
+  const [toolType, setToolType] = useState("");
+  const [toolPurpose, setToolPurpose] = useState("");
+  const [toolDoc, setToolDoc] = useState("");
 
   // Form refs
   const companyFormRef = useRef<HTMLFormElement>(null);
@@ -87,7 +95,6 @@ const KnowledgeBase = () => {
     enabled: !!selectedCompanyId,
   });
 
-  // For activity detail: fetch linked tool IDs
   const { data: activityToolIds = [] } = useQuery({
     queryKey: ["activity_tools", detailActivity?.id],
     queryFn: async () => {
@@ -98,14 +105,10 @@ const KnowledgeBase = () => {
     enabled: !!detailActivity,
   });
 
-  // Department/entity counts for display
   const { data: deptCounts = {} } = useQuery({
     queryKey: ["dept_entity_counts", selectedCompanyId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("entities").select("department_id").in(
-        "department_id",
-        departments.map((d) => d.id)
-      );
+      const { data, error } = await supabase.from("entities").select("department_id").in("department_id", departments.map((d) => d.id));
       if (error) throw error;
       const counts: Record<string, number> = {};
       data.forEach((e) => { counts[e.department_id] = (counts[e.department_id] || 0) + 1; });
@@ -117,10 +120,7 @@ const KnowledgeBase = () => {
   const { data: entityActivityCounts = {} } = useQuery({
     queryKey: ["entity_activity_counts", selectedDeptId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("activities").select("entity_id").in(
-        "entity_id",
-        entities.map((e) => e.id)
-      );
+      const { data, error } = await supabase.from("activities").select("entity_id").in("entity_id", entities.map((e) => e.id));
       if (error) throw error;
       const counts: Record<string, number> = {};
       data.forEach((a) => { counts[a.entity_id] = (counts[a.entity_id] || 0) + 1; });
@@ -129,7 +129,6 @@ const KnowledgeBase = () => {
     enabled: entities.length > 0,
   });
 
-  // Company card counts
   const { data: companyDeptCounts = {} } = useQuery({
     queryKey: ["company_dept_counts"],
     queryFn: async () => {
@@ -221,6 +220,30 @@ const KnowledgeBase = () => {
       queryClient.invalidateQueries({ queryKey: ["entity_activity_counts", selectedDeptId] });
       toast({ title: t.kb.activityAdded });
       setShowAddActivity(false);
+    },
+    onError: (e) => toast({ title: "Erreur", description: e.message, variant: "destructive" }),
+  });
+
+  const addToolMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("tools").insert({
+        company_id: selectedCompanyId!,
+        name: toolName,
+        type: toolType || null,
+        purpose: toolPurpose || null,
+        documentation: toolDoc || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tools", selectedCompanyId] });
+      queryClient.invalidateQueries({ queryKey: ["company_tool_counts"] });
+      toast({ title: lang === "fr" ? "Outil ajouté" : "Tool added" });
+      setShowAddTool(false);
+      setToolName("");
+      setToolType("");
+      setToolPurpose("");
+      setToolDoc("");
     },
     onError: (e) => toast({ title: "Erreur", description: e.message, variant: "destructive" }),
   });
@@ -426,6 +449,9 @@ const KnowledgeBase = () => {
             <SheetDescription>{t.kb.allTools}</SheetDescription>
           </SheetHeader>
           <div className="space-y-3 mt-4">
+            <Button size="sm" className="w-full" onClick={() => setShowAddTool(true)}>
+              <Plus className="h-4 w-4 mr-1" /> {lang === "fr" ? "Ajouter un outil" : "Add Tool"}
+            </Button>
             {tools.map((tool) => (
               <Card key={tool.id}>
                 <CardHeader className="py-3">
@@ -489,6 +515,47 @@ const KnowledgeBase = () => {
             <div><Label>{t.kb.businessObjective}</Label><Input name="business_objective" placeholder="ex. Réduire le temps de traitement" /></div>
             <DialogFooter><Button type="submit" disabled={addActivity.isPending}>{addActivity.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}{t.kb.add}</Button></DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Tool Dialog */}
+      <Dialog open={showAddTool} onOpenChange={setShowAddTool}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{lang === "fr" ? "Ajouter un outil" : "Add Tool"}</DialogTitle>
+            <DialogDescription>{lang === "fr" ? "Référencez un outil utilisé dans l'entreprise" : "Register a tool used in the company"}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>{t.kb.name}</Label>
+              <Input value={toolName} onChange={(e) => setToolName(e.target.value)} placeholder="ex. SAP ERP, Salesforce" required />
+            </div>
+            <div>
+              <Label>Type</Label>
+              <Select value={toolType} onValueChange={setToolType}>
+                <SelectTrigger><SelectValue placeholder={lang === "fr" ? "Sélectionner un type" : "Select type"} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">{lang === "fr" ? "Manuel" : "Manual"}</SelectItem>
+                  <SelectItem value="semi-automated">{lang === "fr" ? "Semi-automatisé" : "Semi-automated"}</SelectItem>
+                  <SelectItem value="system">{lang === "fr" ? "Système" : "System"}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{lang === "fr" ? "Usage / Objectif" : "Purpose"}</Label>
+              <Input value={toolPurpose} onChange={(e) => setToolPurpose(e.target.value)} placeholder={lang === "fr" ? "ex. Gestion des commandes" : "e.g. Order management"} />
+            </div>
+            <div>
+              <Label>{t.kb.documentation}</Label>
+              <Textarea value={toolDoc} onChange={(e) => setToolDoc(e.target.value)} placeholder={lang === "fr" ? "Lien ou notes..." : "Link or notes..."} rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => addToolMutation.mutate()} disabled={!toolName || addToolMutation.isPending}>
+              {addToolMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {t.kb.add}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
