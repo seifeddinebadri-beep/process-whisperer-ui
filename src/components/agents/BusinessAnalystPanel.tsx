@@ -68,6 +68,7 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
   const [pddGenerating, setPddGenerating] = useState(false);
   const [pddContent, setPddContent] = useState<any>(null);
   const [answerCount, setAnswerCount] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
 
   const handleResponse = (data: any) => {
     if (data.agent_message) {
@@ -141,6 +142,7 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
     if (!conversationId || !currentQuestion) return;
 
     setConversation((prev) => [...prev, { type: "user", message: "(Question passée)", timestamp: new Date() }]);
+    setSkippedCount((c) => c + 1);
     setCurrentQuestion(null);
     setLoading(true);
 
@@ -222,6 +224,7 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
         setPddReady(false);
         setPddContent(null);
         setAnswerCount(0);
+        setSkippedCount(0);
       }
       onOpenChange(v);
     }}>
@@ -234,8 +237,10 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
             </div>
             <div className="flex-1">
               <SheetTitle className="text-base">Agent Business Analyst</SheetTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {answerCount} réponses • {useCaseTitle}
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                <span className="text-green-600 dark:text-green-400">✓ {answerCount}</span>
+                {skippedCount > 0 && <span className="text-muted-foreground">⊘ {skippedCount}</span>}
+                <span>• {useCaseTitle}</span>
               </p>
             </div>
             {pddContent && (
