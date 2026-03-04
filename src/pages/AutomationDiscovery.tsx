@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Loader2 } from "lucide-react";
+import { LayoutGrid, List, Loader2, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +31,20 @@ const AutomationDiscovery = () => {
       return data || [];
     },
   });
+
+  // Fetch which use cases have detail content generated
+  const { data: detailIds } = useQuery({
+    queryKey: ["use-case-detail-ids"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("use_case_details")
+        .select("use_case_id");
+      if (error) throw error;
+      return new Set((data || []).map((d: any) => d.use_case_id));
+    },
+  });
+
+  const hasDetail = (ucId: string) => detailIds?.has(ucId) ?? false;
 
   // Use DB data if available, otherwise fallback to mock
   const displayUseCases = (useCases && useCases.length > 0) ? useCases : mockDiscoveryData;
@@ -64,6 +78,11 @@ const AutomationDiscovery = () => {
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
                     <div className="flex items-center gap-1.5">
+                      {hasDetail(uc.id) && (
+                        <Badge variant="outline" className="text-xs gap-1 border-primary/30 text-primary">
+                          <Sparkles className="h-3 w-3" /> Détaillé
+                        </Badge>
+                      )}
                       {(uc as any).automation_variants?.length > 0 && (
                         <Badge variant="outline" className="text-xs">
                           {(uc as any).automation_variants.length} {t.variants?.variantCount || "variantes"}
@@ -112,7 +131,12 @@ const AutomationDiscovery = () => {
                 <TableBody>
                   {displayUseCases.map((uc) => (
                     <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
-                      <TableCell className="font-medium text-sm">{uc.title}</TableCell>
+                      <TableCell className="font-medium text-sm">
+                        <span className="flex items-center gap-1.5">
+                          {uc.title}
+                          {hasDetail(uc.id) && <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{uc.description}</TableCell>
                       <TableCell>
                         <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
