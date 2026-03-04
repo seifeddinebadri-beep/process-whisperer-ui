@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Loader2, Sparkles } from "lucide-react";
+import { LayoutGrid, List, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +21,29 @@ const impactColors: Record<string, string> = {
 const AutomationDiscovery = () => {
   const navigate = useNavigate();
   const { t } = useLang();
+  const queryClient = useQueryClient();
+
+  const deleteUseCase = async (ucId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Supprimer ce cas d'usage et toutes ses données associées ?")) return;
+    try {
+      await supabase.from("use_case_details").delete().eq("use_case_id", ucId);
+      await supabase.from("automation_variants").delete().eq("use_case_id", ucId);
+      const { data: convs } = await supabase.from("ba_conversations").select("id").eq("use_case_id", ucId);
+      if (convs && convs.length > 0) {
+        const convIds = convs.map((c: any) => c.id);
+        await supabase.from("ba_messages").delete().in("conversation_id", convIds);
+        await supabase.from("pdd_documents").delete().in("conversation_id", convIds);
+        await supabase.from("ba_conversations").delete().in("id", convIds);
+      }
+      await supabase.from("automation_use_cases").delete().eq("id", ucId);
+      queryClient.invalidateQueries({ queryKey: ["automation-use-cases"] });
+      queryClient.invalidateQueries({ queryKey: ["use-case-detail-ids"] });
+      toast.success("Cas d'usage supprimé");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la suppression");
+    }
+  };
 
   const { data: useCases, isLoading } = useQuery({
     queryKey: ["automation-use-cases"],
@@ -108,7 +133,17 @@ const AutomationDiscovery = () => {
                       </Badge>
                     )}
                   </div>
-                  <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">{t.discovery.viewDetails}</Button>
+                  <div className="flex items-center justify-between">
+                    <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">{t.discovery.viewDetails}</Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => deleteUseCase(uc.id, e)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -146,7 +181,19 @@ const AutomationDiscovery = () => {
                       <TableCell>
                         <Badge variant="outline" className="text-xs capitalize">{uc.complexity || "—"}</Badge>
                       </TableCell>
-                      <TableCell><Button variant="ghost" size="sm" className="text-xs">{t.discovery.details}</Button></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="text-xs">{t.discovery.details}</Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => deleteUseCase(uc.id, e)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

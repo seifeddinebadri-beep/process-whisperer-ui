@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -571,6 +571,46 @@ const ProcessAnalysis = () => {
             <p className="text-xs text-muted-foreground">{t.analysis.approveSubtitle}</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              disabled={!selectedProcessId}
+              onClick={async () => {
+                if (!confirm("Supprimer ce processus et toutes ses données associées ?")) return;
+                try {
+                  const pid = selectedProcessId;
+                  const { data: ucs } = await supabase.from("automation_use_cases").select("id").eq("process_id", pid);
+                  if (ucs && ucs.length > 0) {
+                    const ucIds = ucs.map((u: any) => u.id);
+                    await supabase.from("use_case_details").delete().in("use_case_id", ucIds);
+                    await supabase.from("automation_variants").delete().in("use_case_id", ucIds);
+                    const { data: convs } = await supabase.from("ba_conversations").select("id").in("use_case_id", ucIds);
+                    if (convs && convs.length > 0) {
+                      const convIds = convs.map((c: any) => c.id);
+                      await supabase.from("ba_messages").delete().in("conversation_id", convIds);
+                      await supabase.from("pdd_documents").delete().in("conversation_id", convIds);
+                      await supabase.from("ba_conversations").delete().in("id", convIds);
+                    }
+                    await supabase.from("automation_use_cases").delete().eq("process_id", pid);
+                  }
+                  await supabase.from("process_steps").delete().eq("process_id", pid);
+                  await supabase.from("process_context").delete().eq("process_id", pid);
+                  await supabase.from("document_chunks").delete().eq("process_id", pid);
+                  await supabase.from("agent_logs").delete().eq("process_id", pid);
+                  await supabase.from("uploaded_processes").delete().eq("id", pid);
+                  setSelectedProcessId("");
+                  queryClient.invalidateQueries({ queryKey: ["analysis-processes"] });
+                  queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
+                  toast({ title: "Processus supprimé" });
+                } catch (err: any) {
+                  toast({ title: "Erreur", description: err.message, variant: "destructive" });
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              {lang === "fr" ? "Supprimer" : "Delete"}
+            </Button>
             <Button
               onClick={launchOrchestrator}
               disabled={orchestratorLoading || displaySteps.length === 0}
