@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { StepCard } from "@/components/process-analysis/StepCard";
 import { StepEditModal } from "@/components/process-analysis/StepEditModal";
 import { ProcessContextCard } from "@/components/process-analysis/ProcessContextCard";
@@ -20,8 +21,9 @@ import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
 
 const ProcessAnalysis = () => {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedProcessId, setSelectedProcessId] = useState("");
 
   // Fetch processes with status analyzed or approved
@@ -109,9 +111,6 @@ const ProcessAnalysis = () => {
   const roles = useMemo(() => [...new Set(displaySteps.map((s) => s.role).filter(Boolean))], [displaySteps]);
   const tools = useMemo(() => [...new Set(displaySteps.map((s) => s.toolUsed).filter(Boolean))], [displaySteps]);
 
-
-
-
   // === Mutations ===
 
   const updateStepMutation = useMutation({
@@ -181,7 +180,6 @@ const ProcessAnalysis = () => {
       const target = index + direction;
       const stepA = steps[index];
       const stepB = steps[target];
-      // Swap step_order values
       const { error: e1 } = await supabase.from("process_steps").update({ step_order: stepB.stepOrder }).eq("id", stepA.id);
       if (e1) throw e1;
       const { error: e2 } = await supabase.from("process_steps").update({ step_order: stepA.stepOrder }).eq("id", stepB.id);
@@ -229,6 +227,32 @@ const ProcessAnalysis = () => {
     },
   });
 
+  // Launch Discovery mutation
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const launchDiscovery = async () => {
+    setDiscoveryLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-process", {
+        body: { process_id: selectedProcessId },
+      });
+      if (error) throw error;
+      toast({
+        title: lang === "fr" ? "Découverte lancée !" : "Discovery launched!",
+        description: lang === "fr"
+          ? `${data?.use_cases_count || 0} cas d'usage générés avec ${data?.variants_count || 0} variantes`
+          : `${data?.use_cases_count || 0} use cases generated with ${data?.variants_count || 0} variants`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["analysis-processes"] });
+      queryClient.invalidateQueries({ queryKey: ["overview-usecases-count"] });
+      navigate("/automation-discovery");
+    } catch (e: any) {
+      console.error("analyze-process error:", e);
+      toast({ title: "Error", description: e.message || "Discovery failed", variant: "destructive" });
+    } finally {
+      setDiscoveryLoading(false);
+    }
+  };
+
   // Local UI state
   const [editingStep, setEditingStep] = useState<ProcessStep | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -249,8 +273,6 @@ const ProcessAnalysis = () => {
     toast({ title: lang === "fr" ? "Contexte enrichi par l'agent IA" : "Context enriched by AI agent" });
   };
 
-  const { lang } = useLang();
-
   const handleSaveStep = (step: ProcessStep) => {
     updateStepMutation.mutate(step);
     setEditingStep(null);
@@ -269,7 +291,6 @@ const ProcessAnalysis = () => {
     reorderMutation.mutate({ index, direction });
   };
 
-  // Debounced context save
   const handleContextChange = useCallback(
     (newCtx: ProcessContext) => {
       updateContextMutation.mutate(newCtx);
@@ -308,7 +329,7 @@ const ProcessAnalysis = () => {
   return (
     <div className="max-w-6xl space-y-6 pb-24">
       {/* Process Selector */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <Select value={selectedProcessId} onValueChange={setSelectedProcessId}>
           <SelectTrigger className="w-[300px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -342,7 +363,6 @@ const ProcessAnalysis = () => {
           eventLogSteps={mockEventLogSteps}
           kbSteps={mockKBSteps}
           onMergeComplete={(mergedSteps) => {
-            // For now, just log and switch back to normal view
             console.log("Merged steps:", mergedSteps);
             setShowComparison(false);
             toast({ title: lang === "fr" ? "Étapes fusionnées avec succès" : "Steps merged successfully" });
@@ -376,7 +396,7 @@ const ProcessAnalysis = () => {
                   <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
                 </Button>
 
-                {/* Roles & Tools (read-only derived from steps) */}
+                {/* Roles & Tools */}
                 <div className="flex flex-wrap gap-6 pt-3 border-t">
                   <EditableBadges label={t.analysis.roles} items={roles} onChange={() => {}} variant="secondary" />
                   <EditableBadges label={t.analysis.tools} items={tools} onChange={() => {}} variant="outline" />
@@ -424,24 +444,40 @@ const ProcessAnalysis = () => {
         onApplyToContext={handleClarificationApply}
       />
 
-      {/* Sticky Approve Bar */}
+      {/* Sticky Bottom Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg z-50">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">{t.analysis.approveBar}</p>
             <p className="text-xs text-muted-foreground">{t.analysis.approveSubtitle}</p>
           </div>
-          <Button
-            disabled={displaySteps.length === 0 || approved || approveMutation.isPending}
-            onClick={() => approveMutation.mutate()}
-          >
-            {approveMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 mr-1" />
+          <div className="flex items-center gap-2">
+            {approved && (
+              <Button
+                onClick={launchDiscovery}
+                disabled={discoveryLoading}
+                variant="default"
+              >
+                {discoveryLoading ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Rocket className="h-4 w-4 mr-1" />
+                )}
+                {lang === "fr" ? "Lancer la découverte" : "Launch Discovery"}
+              </Button>
             )}
-            {approved ? t.analysis.approved : t.analysis.approve}
-          </Button>
+            <Button
+              disabled={displaySteps.length === 0 || approved || approveMutation.isPending}
+              onClick={() => approveMutation.mutate()}
+            >
+              {approveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+              )}
+              {approved ? t.analysis.approved : t.analysis.approve}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
