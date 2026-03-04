@@ -1,8 +1,11 @@
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Building2, Upload, GitBranch, Lightbulb, Loader2, Brain, Bot, Search } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Building2, Upload, GitBranch, Lightbulb, Loader2, Brain, Bot, Search, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLang } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +16,11 @@ import type { AgentName } from "@/components/agents/AgentMessage";
 const Overview = () => {
   const navigate = useNavigate();
   const { t, lang } = useLang();
+
+  // Filters
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterCompany, setFilterCompany] = useState("all");
+  const [filterSearch, setFilterSearch] = useState("");
 
   const { data: companiesCount = 0 } = useQuery({
     queryKey: ["overview-companies-count"],
@@ -37,7 +45,7 @@ const Overview = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("uploaded_processes")
-        .select("id, file_name, status, upload_date, companies(name)")
+        .select("id, file_name, status, upload_date, company_id, companies(name)")
         .order("upload_date", { ascending: false });
       if (error) throw error;
       return data;
@@ -53,7 +61,6 @@ const Overview = () => {
     },
   });
 
-  // Fetch recent agent activity
   const { data: agentLogs = [] } = useQuery({
     queryKey: ["overview-agent-logs"],
     queryFn: async () => {
@@ -67,7 +74,7 @@ const Overview = () => {
     },
   });
 
-
+  // Derived
   const totalProcesses = processes.length;
   const statusCounts = {
     uploaded: processes.filter((p) => p.status === "uploaded").length,
@@ -75,6 +82,28 @@ const Overview = () => {
     approved: processes.filter((p) => p.status === "approved").length,
     discovered: processes.filter((p) => p.status === "discovered").length,
   };
+
+  const uniqueCompanies = useMemo(() => {
+    const map = new Map<string, string>();
+    processes.forEach((p: any) => {
+      if (p.companies?.name && p.company_id) map.set(p.company_id, p.companies.name);
+    });
+    return [...map.entries()];
+  }, [processes]);
+
+  const filteredProcesses = useMemo(() => {
+    return processes.filter((p: any) => {
+      if (filterSearch && !p.file_name.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+      if (filterStatus !== "all" && p.status !== filterStatus) return false;
+      if (filterCompany !== "all") {
+        if (filterCompany === "none" && p.company_id) return false;
+        if (filterCompany !== "none" && p.company_id !== filterCompany) return false;
+      }
+      return true;
+    });
+  }, [processes, filterSearch, filterStatus, filterCompany]);
+
+  const activeFilterCount = [filterSearch, filterStatus !== "all", filterCompany !== "all"].filter(Boolean).length;
 
   const stats = [
     { label: t.overview.companies, value: companiesCount, icon: Building2, color: "text-primary" },
@@ -96,8 +125,6 @@ const Overview = () => {
     approved: "✅",
     discovered: "💡",
   };
-
-  const recentActivity = processes.slice(0, 8);
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -153,19 +180,56 @@ const Overview = () => {
         </Card>
       </div>
 
-      {/* Activity Feed */}
+      {/* Activity Feed with Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t.overview.recentActivity}</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">{t.overview.recentActivity}</CardTitle>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterSearch(""); setFilterStatus("all"); setFilterCompany("all"); }}>
+                <X className="h-3 w-3 mr-1" /> Réinitialiser ({activeFilterCount})
+              </Button>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2 pb-2 border-b">
+            <div className="relative flex-1 min-w-[160px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input placeholder="Rechercher..." value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} className="pl-8 h-9 text-sm" />
+            </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Statut" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                <SelectItem value="uploaded">{stageLabels.uploaded}</SelectItem>
+                <SelectItem value="analyzed">{stageLabels.analyzed}</SelectItem>
+                <SelectItem value="approved">{stageLabels.approved}</SelectItem>
+                <SelectItem value="discovered">{stageLabels.discovered}</SelectItem>
+              </SelectContent>
+            </Select>
+            {uniqueCompanies.length > 0 && (
+              <Select value={filterCompany} onValueChange={setFilterCompany}>
+                <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue placeholder="Entreprise" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  <SelectItem value="none">Sans entreprise</SelectItem>
+                  {uniqueCompanies.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
           {isLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-          ) : recentActivity.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Aucune activité récente</p>
+          ) : filteredProcesses.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              {processes.length === 0 ? "Aucune activité récente" : "Aucun résultat pour ces filtres"}
+            </p>
           ) : (
             <div className="space-y-3">
-              {recentActivity.map((item: any) => (
+              {filteredProcesses.slice(0, 10).map((item: any) => (
                 <div key={item.id} className="flex items-start gap-3 text-sm">
                   <span className="text-lg leading-none mt-0.5">{typeIcons[item.status] || "📄"}</span>
                   <div className="flex-1">
@@ -175,6 +239,9 @@ const Overview = () => {
                   <Badge variant="secondary" className="text-xs capitalize">{stageLabels[item.status] ?? item.status}</Badge>
                 </div>
               ))}
+              {processes.length > 0 && (
+                <p className="text-xs text-muted-foreground text-right">{filteredProcesses.length} / {processes.length} processus</p>
+              )}
             </div>
           )}
         </CardContent>

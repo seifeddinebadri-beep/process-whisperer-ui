@@ -1,12 +1,13 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileUp, Loader2, Trash2 } from "lucide-react";
+import { Upload, FileUp, Loader2, Trash2, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -27,6 +28,11 @@ const ProcessUpload = () => {
   const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
   const [agentEntries, setAgentEntries] = useState<AgentLogEntry[]>([]);
+
+  // Filters for history
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterCompany, setFilterCompany] = useState("all");
 
   // Fetch companies
   const { data: companies = [] } = useQuery({
@@ -84,6 +90,21 @@ const ProcessUpload = () => {
     },
   });
 
+  // Filtered history
+  const filteredHistory = useMemo(() => {
+    return uploadHistory.filter((p: any) => {
+      if (filterSearch && !p.file_name.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+      if (filterStatus !== "all" && p.status !== filterStatus) return false;
+      if (filterCompany !== "all") {
+        if (filterCompany === "none" && p.company_id) return false;
+        if (filterCompany !== "none" && p.company_id !== filterCompany) return false;
+      }
+      return true;
+    });
+  }, [uploadHistory, filterSearch, filterStatus, filterCompany]);
+
+  const activeFilterCount = [filterSearch, filterStatus !== "all", filterCompany !== "all"].filter(Boolean).length;
+
   const handleFileSelect = useCallback((file: File) => {
     setSelectedFile(file);
     toast({ title: t.upload.fileUploaded, description: file.name });
@@ -126,7 +147,6 @@ const ProcessUpload = () => {
 
       addAgentEntry({ agent: "analyst", status: "working", message: "Uploading file to storage..." });
 
-      // 1. Upload file
       const filePath = `${crypto.randomUUID()}/${selectedFile.name}`;
       const { error: storageError } = await supabase.storage.from("process-files").upload(filePath, selectedFile);
       if (storageError) throw storageError;
@@ -134,7 +154,6 @@ const ProcessUpload = () => {
       updateLastEntry({ status: "done", message: "File uploaded successfully." });
       addAgentEntry({ agent: "analyst", status: "working", message: "Creating process record..." });
 
-      // 2. Insert record
       const { data: process, error: insertError } = await supabase
         .from("uploaded_processes")
         .insert({
@@ -149,7 +168,6 @@ const ProcessUpload = () => {
       updateLastEntry({ status: "done", message: "Process record created." });
       addAgentEntry({ agent: "analyst", status: "working", message: "Parsing document into chunks..." });
 
-      // 3. Parse document
       const { error: parseError } = await supabase.functions.invoke("parse-document", { body: { process_id: process.id } });
       if (parseError) {
         addAgentEntry({ agent: "analyst", status: "error", message: "Parsing encountered an issue." });
@@ -159,7 +177,6 @@ const ProcessUpload = () => {
 
       addAgentEntry({ agent: "analyst", status: "working", message: "Generating vector embeddings..." });
 
-      // 4. Embeddings
       try {
         await supabase.functions.invoke("generate-embeddings", { body: { process_id: process.id } });
         updateLastEntry({ status: "done", message: "Embeddings generated." });
@@ -169,7 +186,6 @@ const ProcessUpload = () => {
 
       addAgentEntry({ agent: "analyst", status: "thinking", message: "Agent Analyst is reasoning about the process..." });
 
-      // 5. Agent Analyze As-Is (replaces extract-steps)
       try {
         const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke("agent-analyze-as-is", {
           body: { process_id: process.id },
@@ -220,6 +236,9 @@ const ProcessUpload = () => {
     approved: t.overview.approved,
     discovered: t.overview.discovered,
   };
+
+  const uniqueStatuses = [...new Set(uploadHistory.map((p: any) => p.status))];
+  const uniqueCompanies = [...new Map(uploadHistory.filter((p: any) => p.companies?.name).map((p: any) => [p.company_id, p.companies.name])).entries()];
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -310,8 +329,53 @@ const ProcessUpload = () => {
 
       {/* Upload History */}
       <Card>
-        <CardHeader><CardTitle className="text-base">{t.upload.uploadHistory}</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">{t.upload.uploadHistory}</CardTitle>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterSearch(""); setFilterStatus("all"); setFilterCompany("all"); }}>
+                <X className="h-3 w-3 mr-1" /> Réinitialiser ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher par nom..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[140px] h-9 text-sm">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                {uniqueStatuses.map((s) => (
+                  <SelectItem key={s} value={s}>{statusLabel[s] ?? s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterCompany} onValueChange={setFilterCompany}>
+              <SelectTrigger className="w-[160px] h-9 text-sm">
+                <SelectValue placeholder="Entreprise" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes</SelectItem>
+                <SelectItem value="none">Sans entreprise</SelectItem>
+                {uniqueCompanies.map(([id, name]) => (
+                  <SelectItem key={id} value={id}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -323,7 +387,7 @@ const ProcessUpload = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {uploadHistory.map((p: any) => (
+              {filteredHistory.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium text-sm">{p.file_name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{new Date(p.upload_date).toLocaleDateString()}</TableCell>
@@ -338,13 +402,11 @@ const ProcessUpload = () => {
                         e.stopPropagation();
                         if (!confirm("Supprimer ce processus et toutes ses données associées ?")) return;
                         try {
-                          // Delete cascading data
                           const { data: ucs } = await supabase.from("automation_use_cases").select("id").eq("process_id", p.id);
                           if (ucs && ucs.length > 0) {
                             const ucIds = ucs.map((u: any) => u.id);
                             await supabase.from("use_case_details").delete().in("use_case_id", ucIds);
                             await supabase.from("automation_variants").delete().in("use_case_id", ucIds);
-                            // Delete BA conversations & messages
                             const { data: convs } = await supabase.from("ba_conversations").select("id").in("use_case_id", ucIds);
                             if (convs && convs.length > 0) {
                               const convIds = convs.map((c: any) => c.id);
@@ -358,7 +420,6 @@ const ProcessUpload = () => {
                           await supabase.from("process_context").delete().eq("process_id", p.id);
                           await supabase.from("document_chunks").delete().eq("process_id", p.id);
                           await supabase.from("agent_logs").delete().eq("process_id", p.id);
-                          // Delete storage file
                           if (p.file_path) {
                             await supabase.storage.from("process-files").remove([p.file_path]);
                           }
@@ -376,13 +437,18 @@ const ProcessUpload = () => {
                   </TableCell>
                 </TableRow>
               ))}
-              {uploadHistory.length === 0 && (
+              {filteredHistory.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-8">No uploads yet</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-8">
+                    {uploadHistory.length === 0 ? "No uploads yet" : "Aucun résultat pour ces filtres"}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+          {uploadHistory.length > 0 && (
+            <p className="text-xs text-muted-foreground text-right">{filteredHistory.length} / {uploadHistory.length} processus</p>
+          )}
         </CardContent>
       </Card>
     </div>
