@@ -124,15 +124,15 @@ serve(async (req) => {
       throw e;
     }
 
-    // ===== PHASE 3: Discoverer =====
-    await log(supabase, process_id, "phase_discoverer", "started", "Phase 3/4 — Discoverer: identifying automation use cases and variants...");
+    // ===== PHASE 3: Discoverer (use cases + variants + detailed pages) =====
+    await log(supabase, process_id, "phase_discoverer", "started", "Phase 3/4 — Discoverer: identifying automation use cases, variants, and generating detailed pages...");
 
     let discovererResult: any;
     try {
       discovererResult = await callFunction("analyze-process", { process_id });
       await log(supabase, process_id, "phase_discoverer", "completed",
-        `Discoverer done: ${discovererResult.use_cases_count || 0} use cases with ${discovererResult.variants_count || 0} variants.`,
-        { use_cases_count: discovererResult.use_cases_count, variants_count: discovererResult.variants_count }
+        `Discoverer done: ${discovererResult.use_cases_count || 0} use cases, ${discovererResult.variants_count || 0} variants, ${discovererResult.details_count || 0} detailed pages.`,
+        { use_cases_count: discovererResult.use_cases_count, variants_count: discovererResult.variants_count, details_count: discovererResult.details_count }
       );
     } catch (e) {
       await log(supabase, process_id, "phase_discoverer", "error", `Discoverer failed: ${(e as Error).message}`);
@@ -203,11 +203,12 @@ serve(async (req) => {
       questions_answered: questionsAnswered,
       use_cases_found: discovererResult?.use_cases_count || 0,
       variants_found: discovererResult?.variants_count || 0,
+      details_generated: discovererResult?.details_count || 0,
       pdds_generated: pddsGenerated,
     };
 
     await log(supabase, process_id, "orchestrate", "completed",
-      `Pipeline complete: ${summary.steps_extracted} steps, ${summary.questions_answered} questions, ${summary.use_cases_found} use cases, ${summary.pdds_generated} PDDs.`,
+      `Pipeline complete: ${summary.steps_extracted} steps, ${summary.questions_answered} questions, ${summary.use_cases_found} use cases, ${summary.details_generated} detailed pages, ${summary.pdds_generated} PDDs.`,
       summary
     );
 
