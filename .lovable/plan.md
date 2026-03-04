@@ -1,129 +1,134 @@
 
 
-# Plan: Make the Full Platform Work End-to-End
+# Plan: Transform Platform into an Agentic Architecture
 
-## Current State Assessment
+## Vision
 
-The platform already has significant infrastructure in place:
-- **Knowledge Base**: Fully functional with DB CRUD (companies, departments, entities, activities, tools)
-- **Process Upload**: Functional — uploads files to storage, creates DB records, calls `parse-document` and `generate-embeddings` edge functions
-- **Process Analysis**: Reads steps/context from DB, allows editing, has approve flow and BPMN view. Falls back to mock data when DB is empty
-- **Automation Discovery**: Reads use cases from DB, displays cards/table. Falls back to mock data
-- **Use Case Detail**: Reads variants from DB, shows radar chart, comparison table. Falls back to mock data
-- **Edge Functions**: `parse-document`, `generate-embeddings`, `rag-query`, `analyze-process`, `generate-variant-pdf` all exist and are deployed
+Transform the platform from a linear tool-calling pipeline into a visible **multi-agent system** where each agent has a clear identity, status, and conversational presence in the UI. The user sees agents working, thinking, and collaborating — not just buttons triggering edge functions.
 
-## What's Missing / Broken
+## Current State
 
-### 1. Overview Page — Uses Only Mock Data
-The Overview page (`Overview.tsx`) reads from `mockData.ts` static arrays instead of querying the database. It shows hardcoded stats and activity feed.
+- Edge functions exist (`extract-steps`, `generate-clarifications`, `analyze-process`) but are invoked as invisible background calls
+- No agent identity, no visible reasoning, no agent activity log
+- The clarification panel is a wizard — not an agent conversation
+- No orchestration layer — each function is triggered independently
 
-**Fix**: Replace mock data with live Supabase queries for companies count, departments count, processes count, use cases count, pipeline status breakdown, and recent upload activity.
+## Agent Definitions
 
-### 2. Process Upload — Missing "Analyze" Trigger
-After uploading and parsing, the process status is set to `analyzed` but there's no button to trigger the `analyze-process` edge function which generates automation use cases. The user must manually trigger analysis.
+Three named agents, each with a distinct role:
 
-**Fix**: Add an "Analyze" action button in the upload history table (or on the Process Analysis page) that calls `analyze-process` edge function for a selected process.
-
-### 3. Process Analysis — No Auto-Parse of Uploaded Steps
-When a file is uploaded (CSV/text), `parse-document` creates document chunks but does NOT extract structured process steps into `process_steps` table. The analysis page shows mock data because `process_steps` is empty for real uploads.
-
-**Fix**: Create a new edge function `extract-steps` (or enhance `parse-document`) that uses LLM to extract structured steps from the parsed document chunks and inserts them into `process_steps` and `process_context` tables. Call it after parsing.
-
-### 4. Discovery — No "Launch Discovery" Button
-The `analyze-process` edge function exists but there's no UI trigger. After approving a process, the user should be able to launch automation discovery.
-
-**Fix**: Add a "Launch Discovery" button on the Process Analysis page (after approval) that calls `analyze-process`, which generates use cases and variants.
-
-### 5. Clarification Panel — Uses Only Mock Questions
-The `ClarificationPanel` uses hardcoded `mockClarificationQuestions`. It should generate context-aware questions using RAG + LLM based on the actual process data.
-
-**Fix**: Create an edge function `generate-clarifications` that uses the process context + RAG to generate relevant clarification questions. Wire the panel to call this function.
-
-### 6. Knowledge Base — Missing Tool CRUD
-Tools can be viewed but there's no "Add Tool" dialog in the Knowledge Base page.
-
-**Fix**: Add an "Add Tool" dialog with fields: name, type (manual/semi-automated/system), purpose, documentation.
+```text
+┌──────────────────────────────────────────────────────────┐
+│  Agent 1: "Analyst"                                      │
+│  Role: Process As-Is extraction & structuring            │
+│  Trigger: After upload (auto) or manual re-analyze       │
+│  Backend: extract-steps + enhanced reasoning             │
+│  Output: Structured steps, context, BPMN, pain points    │
+├──────────────────────────────────────────────────────────┤
+│  Agent 2: "Clarifier"                                    │
+│  Role: Ask contextual questions, enrich process context  │
+│  Trigger: User opens clarification panel                 │
+│  Backend: generate-clarifications (conversational)       │
+│  Output: Enriched process_context from Q&A               │
+├──────────────────────────────────────────────────────────┤
+│  Agent 3: "Discoverer"                                   │
+│  Role: Generate automation use cases & variants          │
+│  Trigger: User clicks "Launch Discovery"                 │
+│  Backend: analyze-process                                │
+│  Output: Use cases + variants with full detail            │
+└──────────────────────────────────────────────────────────┘
+```
 
 ## Implementation Tasks
 
-### Task 1: Overview Page — Live Database Queries
-- Replace `mockData.ts` imports with Supabase queries
-- Query: companies count, departments count, uploaded_processes count, automation_use_cases count
-- Query: uploaded_processes grouped by status for pipeline chart
-- Query: recent uploaded_processes ordered by upload_date for activity feed
+### Task 1: Agent Activity Log Component
+Create a reusable `AgentActivityLog` component that displays agent actions in a timeline format. Each entry shows:
+- Agent avatar + name (Analyst / Clarifier / Discoverer)
+- Status: thinking → working → done / error
+- Short message describing what the agent is doing
+- Timestamp
+- Expandable detail (optional)
 
-### Task 2: Extract Steps Edge Function
-- Create `supabase/functions/extract-steps/index.ts`
-- Takes `process_id`, reads document chunks, calls LLM with tool calling to extract structured steps
-- Inserts into `process_steps` and `process_context` tables
-- Update `ProcessUpload.tsx` to call `extract-steps` after `generate-embeddings`
-- Update `supabase/config.toml` with the new function
+This replaces the simple progress bar during upload and the loading spinners elsewhere.
 
-### Task 3: Launch Discovery Button
-- On `ProcessAnalysis.tsx`, add a "Launch Discovery" button next to the Approve button
-- Calls `analyze-process` edge function
-- Shows loading state, then navigates to `/automation-discovery` on success
-- Only enabled when process status is `approved`
+### Task 2: Analyst Agent — Enhanced Process Analysis
+- **New edge function `agent-analyze-as-is`**: Wraps `extract-steps` logic but adds a reasoning step. The agent first summarizes what it found, identifies gaps, and provides a confidence assessment alongside the extracted steps.
+- Returns: `{ steps, context, agent_summary, confidence, gaps_identified }`
+- **UI (ProcessUpload.tsx + ProcessAnalysis.tsx)**: Show the Analyst agent's activity log during upload. On the Analysis page, display the agent's summary card at the top ("I extracted 6 steps from your document. I identified 2 gaps: missing volume data for steps 3-4, and unclear decision logic at step 5.").
 
-### Task 4: Generate Clarification Questions via LLM
-- Create `supabase/functions/generate-clarifications/index.ts`
-- Takes `process_id`, reads steps + context + RAG chunks
-- Uses LLM to generate contextual clarification questions with options
-- Update `ClarificationPanel.tsx` to fetch questions from this function instead of mock data
+### Task 3: Clarifier Agent — Conversational Panel
+Transform the ClarificationPanel from a wizard into a **chat-like agent conversation**:
+- Agent introduces itself: "I'm the Clarifier agent. I've analyzed your process and have some questions to improve the automation analysis."
+- Questions still appear as structured cards with options, but within a conversational flow
+- After each answer, the agent acknowledges and may ask a follow-up (new edge function enhancement: `generate-clarifications` accepts previous answers and generates follow-ups)
+- **New edge function `agent-clarify`**: Replaces `generate-clarifications`. Accepts `{ process_id, conversation_history }` and returns the next question(s) based on what's already been answered. This makes it truly conversational.
+- The panel shows a chat-like timeline: agent message → user selection → agent acknowledgment → next question
 
-### Task 5: Add Tool CRUD in Knowledge Base
-- Add "Add Tool" button and dialog in the departments view
-- Fields: name, type (select), purpose, documentation (optional)
-- Insert into `tools` table with `company_id`
+### Task 4: Discoverer Agent — Visible Discovery Process
+- When "Launch Discovery" is clicked, show the Discoverer agent working in a modal/panel:
+  - "Analyzing process context and 6 steps..."
+  - "Cross-referencing with knowledge base..."
+  - "Generating automation scenarios..."
+  - "Found 3 use cases with 8 variants total"
+- **Enhanced `analyze-process` function**: Add a `reasoning` field to the response summarizing why each use case was identified
+- **UI (ProcessAnalysis.tsx)**: Replace the simple toast with an agent activity modal showing real-time progress
 
-### Task 6: Wire File Type Support
-- Update `ProcessUpload.tsx` to accept `.json` files (currently only `.csv,.txt`)
-- JSON files contain structured process data (like the tickets JSON) — parse them directly into steps
+### Task 5: Agent Status Dashboard on Overview
+- Add an "Agent Activity" section to the Overview page showing recent agent actions across all processes
+- Query a new `agent_logs` table that stores: agent_name, process_id, action, status, message, created_at
+- Gives users visibility into what agents have done
 
-## Technical Architecture
+### Task 6: Agent Logs Table (Database)
+Create table `agent_logs`:
+- `id` (uuid, PK)
+- `process_id` (uuid, FK to uploaded_processes)
+- `agent_name` (text: 'analyst' | 'clarifier' | 'discoverer')
+- `action` (text: e.g. 'extract_steps', 'generate_questions', 'analyze_use_cases')
+- `status` (text: 'started' | 'completed' | 'error')
+- `message` (text: human-readable summary)
+- `metadata` (jsonb: details like step count, question count, etc.)
+- `created_at` (timestamptz)
 
-```text
-Upload Flow (enhanced):
-  File Upload → Storage
-       ↓
-  parse-document (chunks text)
-       ↓
-  generate-embeddings (vector embeddings)
-       ↓
-  extract-steps (LLM extracts structured steps) ← NEW
-       ↓
-  Process Analysis page (edit/enrich steps)
-       ↓
-  Approve → analyze-process (generates use cases + variants)
-       ↓
-  Automation Discovery page
-```
+Each edge function writes to this table at start and completion.
 
-## Edge Function Details
-
-### `extract-steps` (new)
-- Input: `{ process_id }`
-- Reads document_chunks for the process
-- Calls Lovable AI (`google/gemini-3-flash-preview`) with tool calling
-- Tool schema: `extract_process_data` returning `{ steps: [...], context: {...} }`
-- Inserts into `process_steps` and `process_context`
-- Updates process status to `analyzed`
-
-### `generate-clarifications` (new)
-- Input: `{ process_id }`
-- Reads steps + context + top RAG chunks
-- Calls LLM to generate 5-8 clarification questions with options
-- Returns JSON array of questions
+### Task 7: Sidebar Agent Indicators
+- Add small status indicators next to "Process Analysis" and "Automation Discovery" in the sidebar showing if an agent is currently active
+- Use a pulsing dot (green = active, idle = hidden)
 
 ## Files to Create
-- `supabase/functions/extract-steps/index.ts`
-- `supabase/functions/generate-clarifications/index.ts`
+- `src/components/agents/AgentActivityLog.tsx` — reusable agent timeline component
+- `src/components/agents/AgentMessage.tsx` — single agent message bubble
+- `src/components/agents/AgentDiscoveryModal.tsx` — modal for discovery agent progress
+- `supabase/functions/agent-analyze-as-is/index.ts` — enhanced analyst agent
+- `supabase/functions/agent-clarify/index.ts` — conversational clarifier agent
 
 ## Files to Edit
-- `src/pages/Overview.tsx` — live DB queries
-- `src/pages/ProcessUpload.tsx` — call extract-steps, accept .json
-- `src/pages/ProcessAnalysis.tsx` — add Launch Discovery button
-- `src/components/process-analysis/ClarificationPanel.tsx` — fetch from edge function
-- `src/pages/KnowledgeBase.tsx` — add tool CRUD
-- `supabase/config.toml` — register new functions
+- `src/pages/Overview.tsx` — add agent activity section
+- `src/pages/ProcessUpload.tsx` — replace progress bar with AgentActivityLog
+- `src/pages/ProcessAnalysis.tsx` — add analyst summary card, discovery agent modal
+- `src/components/process-analysis/ClarificationPanel.tsx` — transform to conversational agent UI
+- `src/components/AppSidebar.tsx` — add agent status indicators
+- `supabase/functions/analyze-process/index.ts` — add agent_logs writes + reasoning
+- `supabase/functions/extract-steps/index.ts` — add agent_logs writes + summary
+- `supabase/functions/generate-clarifications/index.ts` — add conversation history support
+
+## Database Migration
+```sql
+CREATE TABLE public.agent_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  process_id uuid REFERENCES public.uploaded_processes(id) ON DELETE CASCADE,
+  agent_name text NOT NULL,
+  action text NOT NULL,
+  status text NOT NULL DEFAULT 'started',
+  message text,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.agent_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read agent_logs" ON public.agent_logs FOR SELECT USING (true);
+CREATE POLICY "Allow public insert agent_logs" ON public.agent_logs FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update agent_logs" ON public.agent_logs FOR UPDATE USING (true);
+```
 
