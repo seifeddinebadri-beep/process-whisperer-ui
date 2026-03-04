@@ -109,7 +109,7 @@ const ProcessAnalysis = () => {
 
   // Always use real DB data
   const displaySteps = steps;
-  const displayContext = context || null;
+  const displayContext = context || { processObjective: "", knownConstraints: "", assumptions: "", painPointsSummary: "", volumeAndFrequency: "", stakeholderNotes: "" };
 
   // Derive roles and tools from display steps
   const roles = useMemo(() => [...new Set(displaySteps.map((s) => s.role).filter(Boolean))], [displaySteps]);
