@@ -226,6 +226,83 @@ export type Database = {
           },
         ]
       }
+      ba_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          process_id: string | null
+          status: string
+          updated_at: string
+          use_case_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          process_id?: string | null
+          status?: string
+          updated_at?: string
+          use_case_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          process_id?: string | null
+          status?: string
+          updated_at?: string
+          use_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ba_conversations_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_processes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ba_conversations_use_case_id_fkey"
+            columns: ["use_case_id"]
+            isOneToOne: false
+            referencedRelation: "automation_use_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ba_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          role?: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ba_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ba_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           created_at: string
@@ -339,6 +416,54 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pdd_documents: {
+        Row: {
+          content: Json
+          conversation_id: string
+          created_at: string
+          html_content: string | null
+          id: string
+          status: string
+          title: string
+          use_case_id: string
+        }
+        Insert: {
+          content?: Json
+          conversation_id: string
+          created_at?: string
+          html_content?: string | null
+          id?: string
+          status?: string
+          title: string
+          use_case_id: string
+        }
+        Update: {
+          content?: Json
+          conversation_id?: string
+          created_at?: string
+          html_content?: string | null
+          id?: string
+          status?: string
+          title?: string
+          use_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pdd_documents_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ba_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pdd_documents_use_case_id_fkey"
+            columns: ["use_case_id"]
+            isOneToOne: false
+            referencedRelation: "automation_use_cases"
             referencedColumns: ["id"]
           },
         ]
