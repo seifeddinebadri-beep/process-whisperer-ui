@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileUp, Loader2 } from "lucide-react";
+import { Upload, FileUp, Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -319,6 +319,7 @@ const ProcessUpload = () => {
                 <TableHead>{t.upload.date}</TableHead>
                 <TableHead>{t.upload.company}</TableHead>
                 <TableHead>{t.upload.status}</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -328,11 +329,56 @@ const ProcessUpload = () => {
                   <TableCell className="text-sm text-muted-foreground">{new Date(p.upload_date).toLocaleDateString()}</TableCell>
                   <TableCell className="text-sm">{p.companies?.name ?? "—"}</TableCell>
                   <TableCell><Badge className={`capitalize text-xs ${statusColor[p.status]}`}>{statusLabel[p.status] ?? p.status}</Badge></TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm("Supprimer ce processus et toutes ses données associées ?")) return;
+                        try {
+                          // Delete cascading data
+                          const { data: ucs } = await supabase.from("automation_use_cases").select("id").eq("process_id", p.id);
+                          if (ucs && ucs.length > 0) {
+                            const ucIds = ucs.map((u: any) => u.id);
+                            await supabase.from("use_case_details").delete().in("use_case_id", ucIds);
+                            await supabase.from("automation_variants").delete().in("use_case_id", ucIds);
+                            // Delete BA conversations & messages
+                            const { data: convs } = await supabase.from("ba_conversations").select("id").in("use_case_id", ucIds);
+                            if (convs && convs.length > 0) {
+                              const convIds = convs.map((c: any) => c.id);
+                              await supabase.from("ba_messages").delete().in("conversation_id", convIds);
+                              await supabase.from("pdd_documents").delete().in("conversation_id", convIds);
+                              await supabase.from("ba_conversations").delete().in("id", convIds);
+                            }
+                            await supabase.from("automation_use_cases").delete().eq("process_id", p.id);
+                          }
+                          await supabase.from("process_steps").delete().eq("process_id", p.id);
+                          await supabase.from("process_context").delete().eq("process_id", p.id);
+                          await supabase.from("document_chunks").delete().eq("process_id", p.id);
+                          await supabase.from("agent_logs").delete().eq("process_id", p.id);
+                          // Delete storage file
+                          if (p.file_path) {
+                            await supabase.storage.from("process-files").remove([p.file_path]);
+                          }
+                          await supabase.from("uploaded_processes").delete().eq("id", p.id);
+                          queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
+                          queryClient.invalidateQueries({ queryKey: ["overview-processes"] });
+                          toast({ title: "Processus supprimé" });
+                        } catch (err: any) {
+                          toast({ title: "Erreur", description: err.message, variant: "destructive" });
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               {uploadHistory.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground text-sm py-8">No uploads yet</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-8">No uploads yet</TableCell>
                 </TableRow>
               )}
             </TableBody>
