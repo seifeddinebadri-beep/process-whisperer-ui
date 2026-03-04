@@ -39,6 +39,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
   const [currentQuestion, setCurrentQuestion] = useState<ClarificationQuestion | null>(null);
   const [pendingQuestions, setPendingQuestions] = useState<ClarificationQuestion[]>([]);
   const [answeredQuestions, setAnsweredQuestions] = useState<{ question: string; answer: string }[]>([]);
+  const [skippedCount, setSkippedCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | undefined>();
@@ -167,6 +168,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
       ...prev,
       { type: "user", answer: lang === "fr" ? "(Question passée)" : "(Skipped)", timestamp: new Date() },
     ]);
+    setSkippedCount((c) => c + 1);
     setSelectedOption(undefined);
     setCustomAnswer("");
 
@@ -221,6 +223,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
         setPendingQuestions([]);
         setAnsweredQuestions([]);
         setAllDone(false);
+        setSkippedCount(0);
       }
       onOpenChange(v);
     }}>
@@ -233,8 +236,9 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
             </div>
             <div>
               <SheetTitle className="text-base">Agent Clarifier</SheetTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {answeredQuestions.length} {lang === "fr" ? "réponses collectées" : "answers collected"}
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                <span className="text-green-600 dark:text-green-400">✓ {answeredQuestions.length}</span>
+                {skippedCount > 0 && <span className="text-muted-foreground">⊘ {skippedCount}</span>}
               </p>
             </div>
           </div>
