@@ -1,9 +1,10 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -318,6 +319,30 @@ const ProcessAnalysis = () => {
   const [orchestratorOpen, setOrchestratorOpen] = useState(false);
   const [orchestratorLoading, setOrchestratorLoading] = useState(false);
 
+  // Step filters
+  const [stepSearch, setStepSearch] = useState("");
+  const [stepRoleFilter, setStepRoleFilter] = useState("all");
+  const [stepToolFilter, setStepToolFilter] = useState("all");
+  const [stepSourceFilter, setStepSourceFilter] = useState("all");
+  const [stepDecisionFilter, setStepDecisionFilter] = useState("all");
+
+  const uniqueSources = useMemo(() => [...new Set(displaySteps.map((s) => s.source).filter(Boolean))], [displaySteps]);
+  const uniqueDecisionTypes = useMemo(() => [...new Set(displaySteps.map((s) => s.decisionType).filter(Boolean))], [displaySteps]);
+
+  const filteredSteps = useMemo(() => {
+    return displaySteps.filter((s) => {
+      if (stepSearch && !s.name.toLowerCase().includes(stepSearch.toLowerCase()) && !s.description.toLowerCase().includes(stepSearch.toLowerCase())) return false;
+      if (stepRoleFilter !== "all" && s.role !== stepRoleFilter) return false;
+      if (stepToolFilter !== "all" && s.toolUsed !== stepToolFilter) return false;
+      if (stepSourceFilter !== "all" && s.source !== stepSourceFilter) return false;
+      if (stepDecisionFilter !== "all" && s.decisionType !== stepDecisionFilter) return false;
+      return true;
+    });
+  }, [displaySteps, stepSearch, stepRoleFilter, stepToolFilter, stepSourceFilter, stepDecisionFilter]);
+
+  const stepFilterCount = [stepSearch, stepRoleFilter !== "all", stepToolFilter !== "all", stepSourceFilter !== "all", stepDecisionFilter !== "all"].filter(Boolean).length;
+  const clearStepFilters = () => { setStepSearch(""); setStepRoleFilter("all"); setStepToolFilter("all"); setStepSourceFilter("all"); setStepDecisionFilter("all"); };
+
   const launchOrchestrator = async () => {
     setOrchestratorLoading(true);
     setOrchestratorOpen(true);
@@ -472,27 +497,85 @@ const ProcessAnalysis = () => {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t.analysis.title}</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">{t.analysis.title}</CardTitle>
+              {stepFilterCount > 0 && (
+                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={clearStepFilters}>
+                  <X className="h-3 w-3 mr-1" /> Réinitialiser ({stepFilterCount})
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Step Filters */}
+            {displaySteps.length > 0 && (
+              <div className="flex flex-wrap gap-2 pb-2 border-b">
+                <div className="relative flex-1 min-w-[160px]">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input placeholder="Rechercher une étape..." value={stepSearch} onChange={(e) => setStepSearch(e.target.value)} className="pl-8 h-9 text-sm" />
+                </div>
+                {roles.length > 0 && (
+                  <Select value={stepRoleFilter} onValueChange={setStepRoleFilter}>
+                    <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue placeholder="Rôle" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les rôles</SelectItem>
+                      {roles.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {tools.length > 0 && (
+                  <Select value={stepToolFilter} onValueChange={setStepToolFilter}>
+                    <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Outil" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les outils</SelectItem>
+                      {tools.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {uniqueSources.length > 1 && (
+                  <Select value={stepSourceFilter} onValueChange={setStepSourceFilter}>
+                    <SelectTrigger className="w-[120px] h-9 text-sm"><SelectValue placeholder="Source" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Toute source</SelectItem>
+                      {uniqueSources.map((s) => <SelectItem key={s} value={s!}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {uniqueDecisionTypes.length > 1 && (
+                  <Select value={stepDecisionFilter} onValueChange={setStepDecisionFilter}>
+                    <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Décision" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tout type</SelectItem>
+                      {uniqueDecisionTypes.map((d) => <SelectItem key={d} value={d!}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
             {loadingSteps ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
               <>
-                {displaySteps.map((step, i) => (
-                  <StepCard
-                    key={step.id}
-                    step={step}
-                    index={i}
-                    total={displaySteps.length}
-                    onEdit={setEditingStep}
-                    onDelete={handleDeleteStep}
-                    onMoveUp={(idx) => handleMoveStep(idx, -1)}
-                    onMoveDown={(idx) => handleMoveStep(idx, 1)}
-                  />
-                ))}
+                {filteredSteps.length === 0 && displaySteps.length > 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">Aucune étape ne correspond aux filtres</p>
+                ) : (
+                  filteredSteps.map((step, i) => (
+                    <StepCard
+                      key={step.id}
+                      step={step}
+                      index={i}
+                      total={filteredSteps.length}
+                      onEdit={setEditingStep}
+                      onDelete={handleDeleteStep}
+                      onMoveUp={(idx) => handleMoveStep(idx, -1)}
+                      onMoveDown={(idx) => handleMoveStep(idx, 1)}
+                      hideActions={stepFilterCount > 0}
+                    />
+                  ))
+                )}
                 <Button variant="outline" className="w-full" onClick={() => setIsAdding(true)}>
                   <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
                 </Button>
@@ -502,6 +585,9 @@ const ProcessAnalysis = () => {
                   <EditableBadges label={t.analysis.roles} items={roles} onChange={() => {}} variant="secondary" />
                   <EditableBadges label={t.analysis.tools} items={tools} onChange={() => {}} variant="outline" />
                 </div>
+                {displaySteps.length > 0 && (
+                  <p className="text-xs text-muted-foreground text-right">{filteredSteps.length} / {displaySteps.length} étapes</p>
+                )}
               </>
             )}
           </CardContent>

@@ -1,16 +1,18 @@
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useLang } from "@/lib/i18n";
-import { mockUseCases as mockDiscoveryData } from "@/data/mockAutomationDiscoveryData";
 
 const impactColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
@@ -22,6 +24,13 @@ const AutomationDiscovery = () => {
   const navigate = useNavigate();
   const { t } = useLang();
   const queryClient = useQueryClient();
+
+  // Filters
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterImpact, setFilterImpact] = useState("all");
+  const [filterComplexity, setFilterComplexity] = useState("all");
+  const [filterProcess, setFilterProcess] = useState("all");
+  const [filterDetailed, setFilterDetailed] = useState("all");
 
   const deleteUseCase = async (ucId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -45,7 +54,7 @@ const AutomationDiscovery = () => {
     }
   };
 
-  const { data: useCases, isLoading } = useQuery({
+  const { data: useCases = [], isLoading } = useQuery({
     queryKey: ["automation-use-cases"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -57,7 +66,6 @@ const AutomationDiscovery = () => {
     },
   });
 
-  // Fetch which use cases have detail content generated
   const { data: detailIds } = useQuery({
     queryKey: ["use-case-detail-ids"],
     queryFn: async () => {
@@ -71,8 +79,36 @@ const AutomationDiscovery = () => {
 
   const hasDetail = (ucId: string) => detailIds?.has(ucId) ?? false;
 
-  // Use DB data if available, otherwise fallback to mock
-  const displayUseCases = (useCases && useCases.length > 0) ? useCases : mockDiscoveryData;
+  // Derive unique values for filters
+  const uniqueProcesses = useMemo(() => {
+    const map = new Map<string, string>();
+    useCases.forEach((uc: any) => {
+      if (uc.uploaded_processes?.file_name) {
+        map.set(uc.process_id, uc.uploaded_processes.file_name);
+      }
+    });
+    return [...map.entries()];
+  }, [useCases]);
+
+  const uniqueComplexities = useMemo(() => [...new Set(useCases.map((uc: any) => uc.complexity).filter(Boolean))], [useCases]);
+  const uniqueImpacts = useMemo(() => [...new Set(useCases.map((uc: any) => uc.impact).filter(Boolean))], [useCases]);
+
+  // Apply filters
+  const filteredUseCases = useMemo(() => {
+    return useCases.filter((uc: any) => {
+      if (filterSearch && !uc.title.toLowerCase().includes(filterSearch.toLowerCase()) && !(uc.description || "").toLowerCase().includes(filterSearch.toLowerCase())) return false;
+      if (filterImpact !== "all" && uc.impact !== filterImpact) return false;
+      if (filterComplexity !== "all" && uc.complexity !== filterComplexity) return false;
+      if (filterProcess !== "all" && uc.process_id !== filterProcess) return false;
+      if (filterDetailed === "yes" && !hasDetail(uc.id)) return false;
+      if (filterDetailed === "no" && hasDetail(uc.id)) return false;
+      return true;
+    });
+  }, [useCases, filterSearch, filterImpact, filterComplexity, filterProcess, filterDetailed, detailIds]);
+
+  const activeFilterCount = [filterSearch, filterImpact !== "all", filterComplexity !== "all", filterProcess !== "all", filterDetailed !== "all"].filter(Boolean).length;
+
+  const clearFilters = () => { setFilterSearch(""); setFilterImpact("all"); setFilterComplexity("all"); setFilterProcess("all"); setFilterDetailed("all"); };
 
   if (isLoading) {
     return (
@@ -89,6 +125,60 @@ const AutomationDiscovery = () => {
         <p className="text-sm text-muted-foreground">{t.discovery.subtitle}</p>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-4 pb-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher un cas d'usage..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+            <Select value={filterImpact} onValueChange={setFilterImpact}>
+              <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue placeholder="Impact" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tout impact</SelectItem>
+                {uniqueImpacts.map((i) => <SelectItem key={i} value={i} className="capitalize">{i}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterComplexity} onValueChange={setFilterComplexity}>
+              <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Complexité" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toute complexité</SelectItem>
+                {uniqueComplexities.map((c) => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterProcess} onValueChange={setFilterProcess}>
+              <SelectTrigger className="w-[180px] h-9 text-sm"><SelectValue placeholder="Processus" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les processus</SelectItem>
+                {uniqueProcesses.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterDetailed} onValueChange={setFilterDetailed}>
+              <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue placeholder="Détaillé" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous</SelectItem>
+                <SelectItem value="yes">✨ Détaillé</SelectItem>
+                <SelectItem value="no">Non détaillé</SelectItem>
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-9" onClick={clearFilters}>
+                <X className="h-3 w-3 mr-1" /> Réinitialiser ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+          {useCases.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-2">{filteredUseCases.length} / {useCases.length} cas d'usage</p>
+          )}
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="cards">
         <TabsList>
           <TabsTrigger value="cards"><LayoutGrid className="h-4 w-4 mr-1" /> {t.discovery.cards}</TabsTrigger>
@@ -96,58 +186,61 @@ const AutomationDiscovery = () => {
         </TabsList>
 
         <TabsContent value="cards" className="mt-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {displayUseCases.map((uc) => (
-              <Card key={uc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
-                    <div className="flex items-center gap-1.5">
-                      {hasDetail(uc.id) && (
-                        <Badge variant="outline" className="text-xs gap-1 border-primary/30 text-primary">
-                          <Sparkles className="h-3 w-3" /> Détaillé
+          {filteredUseCases.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">Aucun cas d'usage ne correspond aux filtres</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {filteredUseCases.map((uc: any) => (
+                <Card key={uc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
+                      <div className="flex items-center gap-1.5">
+                        {hasDetail(uc.id) && (
+                          <Badge variant="outline" className="text-xs gap-1 border-primary/30 text-primary">
+                            <Sparkles className="h-3 w-3" /> Détaillé
+                          </Badge>
+                        )}
+                        {uc.automation_variants?.length > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            {uc.automation_variants.length} {t.variants?.variantCount || "variantes"}
+                          </Badge>
+                        )}
+                        <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
+                          {t.discovery[(uc.impact || "medium") as "low" | "medium" | "high"]}
                         </Badge>
-                      )}
-                      {(uc as any).automation_variants?.length > 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          {(uc as any).automation_variants.length} {t.variants?.variantCount || "variantes"}
-                        </Badge>
-                      )}
-                      <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
-                        {t.discovery[(uc.impact || "medium") as "low" | "medium" | "high"]}
-                      </Badge>
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{uc.description}</p>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    {uc.complexity && (
-                      <Badge variant="outline" className="text-xs capitalize">
-                        {t.discovery.complexity || "Complexité"}: {uc.complexity}
-                      </Badge>
-                    )}
-                    {uc.roi_estimate && (
-                      <Badge variant="outline" className="text-xs">
-                        ROI: {uc.roi_estimate}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">{t.discovery.viewDetails}</Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => deleteUseCase(uc.id, e)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{uc.description}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex flex-wrap gap-1">
+                      {uc.complexity && (
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {t.discovery.complexity || "Complexité"}: {uc.complexity}
+                        </Badge>
+                      )}
+                      {uc.roi_estimate && (
+                        <Badge variant="outline" className="text-xs">ROI: {uc.roi_estimate}</Badge>
+                      )}
+                      {uc.uploaded_processes?.file_name && (
+                        <Badge variant="secondary" className="text-[10px]">{uc.uploaded_processes.file_name}</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Button variant="ghost" size="sm" className="text-xs p-0 h-auto text-primary">{t.discovery.viewDetails}</Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => deleteUseCase(uc.id, e)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="table" className="mt-4">
@@ -157,14 +250,16 @@ const AutomationDiscovery = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t.discovery.useCase}</TableHead>
-                    <TableHead>{t.discovery.description}</TableHead>
+                    <TableHead>Processus</TableHead>
                     <TableHead>{t.discovery.potential}</TableHead>
                     <TableHead>Complexité</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayUseCases.map((uc) => (
+                  {filteredUseCases.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-8">Aucun résultat</TableCell></TableRow>
+                  ) : filteredUseCases.map((uc: any) => (
                     <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
                       <TableCell className="font-medium text-sm">
                         <span className="flex items-center gap-1.5">
@@ -172,7 +267,7 @@ const AutomationDiscovery = () => {
                           {hasDetail(uc.id) && <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />}
                         </span>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{uc.description}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{uc.uploaded_processes?.file_name || "—"}</TableCell>
                       <TableCell>
                         <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>
                           {t.discovery[(uc.impact || "medium") as "low" | "medium" | "high"]}
@@ -184,12 +279,7 @@ const AutomationDiscovery = () => {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="sm" className="text-xs">{t.discovery.details}</Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={(e) => deleteUseCase(uc.id, e)}
-                          >
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => deleteUseCase(uc.id, e)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
