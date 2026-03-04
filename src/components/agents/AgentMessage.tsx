@@ -27,8 +27,8 @@ const statusIcon: Record<AgentStatus, typeof Loader2> = {
 };
 
 export function AgentMessage({ agent, status, message, detail, timestamp, className }: AgentMessageProps) {
-  const config = agentConfig[agent];
-  const StatusIcon = statusIcon[status];
+  const config = agentConfig[agent] || { label: agent, icon: Bot, color: "text-muted-foreground", bgColor: "bg-muted" };
+  const StatusIcon = statusIcon[status] || Loader2;
   const isAnimating = status === "thinking" || status === "working";
 
   return (
