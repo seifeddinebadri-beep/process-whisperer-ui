@@ -140,10 +140,10 @@ Tu dois :
 4. Vérifier la cohérence du périmètre : rien d'oublié ? Rien de superflu ?
 5. Questionner les hypothèses de ROI et de coût
 
-Tu poses UNE question à la fois, de manière directe et professionnelle.
+Tu poses UNE question à la fois via l'appel de fonction fourni, avec un message d'introduction et 3-4 options de réponse pertinentes.
 Après chaque réponse de l'utilisateur, tu fais un bref accusé de réception puis poses la question suivante.
 
-${shouldGeneratePDD ? "L'utilisateur a répondu à suffisamment de questions. Si sa dernière réponse clôt un sujet, propose de générer le PDD en appelant la fonction generate_pdd_signal. Sinon, pose une dernière question de synthèse." : ""}
+${shouldGeneratePDD ? "L'utilisateur a répondu à suffisamment de questions. Si sa dernière réponse clôt un sujet, retourne pdd_ready=true. Sinon, pose une dernière question de synthèse." : ""}
 
 Contexte du cas d'usage :
 ${contextParts.join("\n")}`;
@@ -161,31 +161,46 @@ ${contextParts.join("\n")}`;
       messages.push(...conversationMessages);
     }
 
-    const tools: any[] = [];
-    if (shouldGeneratePDD) {
-      tools.push({
+    const tools: any[] = [
+      {
         type: "function",
         function: {
-          name: "generate_pdd_signal",
-          description: "Signal that enough information has been gathered to generate the PDD",
+          name: "ask_question",
+          description: "Ask a structured challenge question with multiple-choice options",
           parameters: {
             type: "object",
             properties: {
-              ready: { type: "boolean" },
-              summary: { type: "string", description: "Brief summary of key findings from the conversation" },
+              agent_message: { type: "string", description: "Message d'introduction ou accusé de réception avant la question" },
+              category: { type: "string", enum: ["business_rules", "integration", "risk", "scope", "roi", "change_management"], description: "Catégorie de la question" },
+              question: { type: "string", description: "La question de challenge" },
+              why: { type: "string", description: "Pourquoi cette question est importante" },
+              options: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: { type: "string", description: "Réponse courte" },
+                    description: { type: "string", description: "Explication de cette option" },
+                  },
+                  required: ["label"],
+                  additionalProperties: false,
+                },
+              },
+              pdd_ready: { type: "boolean", description: "True si assez d'informations pour générer le PDD" },
             },
-            required: ["ready", "summary"],
+            required: ["agent_message", "category", "question", "why", "options", "pdd_ready"],
             additionalProperties: false,
           },
         },
-      });
-    }
+      },
+    ];
 
     const aiBody: any = {
       model: "google/gemini-3-flash-preview",
       messages,
+      tools,
+      tool_choice: { type: "function", function: { name: "ask_question" } },
     };
-    if (tools.length > 0) aiBody.tools = tools;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -214,29 +229,36 @@ ${contextParts.join("\n")}`;
 
     const aiData = await aiResponse.json();
     const choice = aiData.choices?.[0]?.message;
+    const toolCall = choice?.tool_calls?.[0];
     
-    let agentContent = choice?.content || "";
-    let pddReady = false;
-    let pddSummary = "";
+    let result: any = {
+      agent_message: "",
+      question: null,
+      pdd_ready: false,
+    };
 
-    // Check for tool call (PDD generation signal)
-    if (choice?.tool_calls?.[0]) {
-      const tc = choice.tool_calls[0];
-      if (tc.function.name === "generate_pdd_signal") {
-        const args = JSON.parse(tc.function.arguments);
-        pddReady = args.ready;
-        pddSummary = args.summary;
-        if (!agentContent) {
-          agentContent = "J'ai recueilli suffisamment d'informations. Je vais maintenant générer le PDD (Process Design Document) basé sur notre échange.";
-        }
-      }
+    if (toolCall) {
+      const args = JSON.parse(toolCall.function.arguments);
+      result = {
+        agent_message: args.agent_message,
+        question: {
+          category: args.category,
+          question: args.question,
+          why: args.why,
+          options: args.options || [],
+        },
+        pdd_ready: args.pdd_ready || false,
+      };
+    } else {
+      // Fallback to content
+      result.agent_message = choice?.content || "Je n'ai pas pu formuler ma question. Pouvez-vous relancer ?";
     }
 
-    // Save agent response
-    if (convId && agentContent) {
+    // Save agent message
+    if (convId && result.agent_message) {
       await supabase.from("ba_messages").insert({
-        conversation_id: convId, role: "agent", content: agentContent,
-        metadata: pddReady ? { pdd_ready: true, pdd_summary: pddSummary } : {},
+        conversation_id: convId, role: "agent", content: result.agent_message,
+        metadata: { question: result.question, pdd_ready: result.pdd_ready },
       });
     }
 
@@ -246,18 +268,18 @@ ${contextParts.join("\n")}`;
       agent_name: "business_analyst",
       action: "challenge_approach",
       status: "completed",
-      message: pddReady
+      message: result.pdd_ready
         ? "Challenge session complete. Ready to generate PDD."
-        : `Question posed. Conversation has ${(history?.length || 0) + 2} messages.`,
+        : `Question posed (${result.question?.category || "general"}).`,
     });
 
     return new Response(
       JSON.stringify({
         success: true,
         conversation_id: convId,
-        agent_message: agentContent,
-        pdd_ready: pddReady,
-        pdd_summary: pddSummary,
+        agent_message: result.agent_message,
+        question: result.question,
+        pdd_ready: result.pdd_ready,
         message_count: (history?.length || 0) + (user_message ? 2 : 1),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

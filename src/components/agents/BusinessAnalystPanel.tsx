@@ -9,17 +9,46 @@ import { Separator } from "@/components/ui/separator";
 import { AgentMessage } from "@/components/agents/AgentMessage";
 import { cn } from "@/lib/utils";
 import {
-  Send, Loader2, Bot, FileText, Download, Sparkles,
+  Send, Loader2, FileText, Download,
   MessageSquare, PenLine, CheckCircle2, AlertTriangle, Shield,
 } from "lucide-react";
 import { toast } from "sonner";
+
+interface QuestionOption {
+  label: string;
+  description?: string;
+}
+
+interface StructuredQuestion {
+  category: string;
+  question: string;
+  why: string;
+  options: QuestionOption[];
+}
 
 interface ConversationEntry {
   type: "agent" | "user";
   message: string;
   timestamp: Date;
-  pddReady?: boolean;
 }
+
+const categoryLabels: Record<string, string> = {
+  business_rules: "Règles métier",
+  integration: "Intégration",
+  risk: "Risques",
+  scope: "Périmètre",
+  roi: "ROI & Coûts",
+  change_management: "Conduite du changement",
+};
+
+const categoryColors: Record<string, string> = {
+  business_rules: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  integration: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  risk: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  scope: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  roi: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  change_management: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
+};
 
 interface BusinessAnalystPanelProps {
   open: boolean;
@@ -30,13 +59,30 @@ interface BusinessAnalystPanelProps {
 
 const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: BusinessAnalystPanelProps) => {
   const [conversation, setConversation] = useState<ConversationEntry[]>([]);
-  const [input, setInput] = useState("");
+  const [currentQuestion, setCurrentQuestion] = useState<StructuredQuestion | null>(null);
+  const [selectedOption, setSelectedOption] = useState<string | undefined>();
+  const [customAnswer, setCustomAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [pddReady, setPddReady] = useState(false);
   const [pddGenerating, setPddGenerating] = useState(false);
   const [pddContent, setPddContent] = useState<any>(null);
-  const [messageCount, setMessageCount] = useState(0);
+  const [answerCount, setAnswerCount] = useState(0);
+
+  const handleResponse = (data: any) => {
+    if (data.agent_message) {
+      setConversation((prev) => [...prev, {
+        type: "agent", message: data.agent_message, timestamp: new Date(),
+      }]);
+    }
+    if (data.question) {
+      setCurrentQuestion(data.question);
+    } else {
+      setCurrentQuestion(null);
+    }
+    if (data.pdd_ready) setPddReady(true);
+    if (data.conversation_id) setConversationId(data.conversation_id);
+  };
 
   const startConversation = useCallback(async () => {
     if (conversation.length > 0) return;
@@ -46,13 +92,7 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
         body: { use_case_id: useCaseId },
       });
       if (error) throw error;
-      setConversationId(data.conversation_id);
-      setMessageCount(data.message_count || 1);
-      setConversation([{
-        type: "agent",
-        message: data.agent_message,
-        timestamp: new Date(),
-      }]);
+      handleResponse(data);
     } catch (e: any) {
       toast.error("Erreur lors du démarrage de la session BA");
       console.error(e);
@@ -67,12 +107,16 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
     }
   }, [open, useCaseId]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || !conversationId) return;
-    const userMsg = input.trim();
-    setInput("");
+  const submitAnswer = async () => {
+    if (!conversationId) return;
+    const answerText = selectedOption === "__other__" ? customAnswer.trim() : (selectedOption || "");
+    if (!answerText) return;
 
-    setConversation((prev) => [...prev, { type: "user", message: userMsg, timestamp: new Date() }]);
+    setConversation((prev) => [...prev, { type: "user", message: answerText, timestamp: new Date() }]);
+    setSelectedOption(undefined);
+    setCustomAnswer("");
+    setCurrentQuestion(null);
+    setAnswerCount((c) => c + 1);
     setLoading(true);
 
     try {
@@ -80,18 +124,11 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
         body: {
           use_case_id: useCaseId,
           conversation_id: conversationId,
-          user_message: userMsg,
+          user_message: answerText,
         },
       });
       if (error) throw error;
-      setMessageCount(data.message_count || messageCount + 2);
-      setConversation((prev) => [...prev, {
-        type: "agent",
-        message: data.agent_message,
-        timestamp: new Date(),
-        pddReady: data.pdd_ready,
-      }]);
-      if (data.pdd_ready) setPddReady(true);
+      handleResponse(data);
     } catch (e: any) {
       toast.error("Erreur de communication avec l'agent BA");
       console.error(e);
@@ -105,7 +142,7 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
     setPddGenerating(true);
     setConversation((prev) => [...prev, {
       type: "agent",
-      message: "📝 Génération du PDD en cours... J'analyse notre conversation et les données du processus pour construire un document complet.",
+      message: "📝 Génération du PDD en cours... J'analyse notre conversation et les données du processus.",
       timestamp: new Date(),
     }]);
     try {
@@ -114,9 +151,10 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
       });
       if (error) throw error;
       setPddContent(data.pdd);
+      setCurrentQuestion(null);
       setConversation((prev) => [...prev, {
         type: "agent",
-        message: `✅ Le PDD "${data.pdd.title}" a été généré avec succès. Consultez-le ci-dessous ou téléchargez-le en PDF.`,
+        message: `✅ Le PDD "${data.pdd.title}" a été généré. Consultez-le ci-dessous ou téléchargez-le en PDF.`,
         timestamp: new Date(),
       }]);
       toast.success("PDD généré avec succès");
@@ -144,17 +182,21 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
     } catch { toast.error("Erreur lors du téléchargement"); }
   };
 
-  const userAnswerCount = conversation.filter((e) => e.type === "user").length;
-  const showGeneratePDD = (pddReady || userAnswerCount >= 3) && !pddContent;
+  const isOtherSelected = selectedOption === "__other__";
+  const canAnswer = selectedOption && (selectedOption !== "__other__" || customAnswer.trim());
+  const showGeneratePDD = (pddReady || answerCount >= 3) && !pddContent;
 
   return (
     <Sheet open={open} onOpenChange={(v) => {
       if (!v) {
         setConversation([]);
         setConversationId(null);
+        setCurrentQuestion(null);
+        setSelectedOption(undefined);
+        setCustomAnswer("");
         setPddReady(false);
         setPddContent(null);
-        setMessageCount(0);
+        setAnswerCount(0);
       }
       onOpenChange(v);
     }}>
@@ -168,7 +210,7 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
             <div className="flex-1">
               <SheetTitle className="text-base">Agent Business Analyst</SheetTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {userAnswerCount} réponses • {useCaseTitle}
+                {answerCount} réponses • {useCaseTitle}
               </p>
             </div>
             {pddContent && (
@@ -216,7 +258,6 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
                   <span className="font-semibold text-sm">{pddContent.title}</span>
                   <Badge variant="outline" className="text-[10px]">PDD</Badge>
                 </div>
-
                 <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
                   <div>
                     <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Résumé Exécutif</h4>
@@ -270,37 +311,67 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
           </div>
         </ScrollArea>
 
-        {/* Generate PDD button */}
-        {showGeneratePDD && (
-          <div className="border-t px-6 py-3">
-            <Button onClick={generatePDD} disabled={pddGenerating} className="w-full gap-2" variant="default">
-              {pddGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              Générer le PDD ({userAnswerCount} réponses collectées)
+        {/* Current question with multi-choice */}
+        {currentQuestion && !loading && !pddContent && (
+          <div className="border-t px-6 py-4 space-y-3 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className={cn("text-xs", categoryColors[currentQuestion.category] || "")}>
+                {categoryLabels[currentQuestion.category] || currentQuestion.category}
+              </Badge>
+            </div>
+            <p className="text-sm font-medium">{currentQuestion.question}</p>
+            <p className="text-xs text-muted-foreground italic">💡 {currentQuestion.why}</p>
+
+            <div className="space-y-1.5 max-h-48 overflow-auto">
+              {currentQuestion.options.map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => { setSelectedOption(opt.label); setCustomAnswer(""); }}
+                  className={cn(
+                    "w-full text-left rounded-lg border px-3 py-2 transition-all text-sm",
+                    selectedOption === opt.label
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  )}
+                >
+                  {opt.label}
+                  {opt.description && <span className="block text-xs text-muted-foreground">{opt.description}</span>}
+                </button>
+              ))}
+              <button
+                onClick={() => setSelectedOption("__other__")}
+                className={cn(
+                  "w-full text-left rounded-lg border px-3 py-2 transition-all text-sm",
+                  isOtherSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                )}
+              >
+                <PenLine className="h-3 w-3 inline mr-1" />
+                Autre (réponse libre)
+              </button>
+              {isOtherSelected && (
+                <Textarea
+                  value={customAnswer}
+                  onChange={(e) => setCustomAnswer(e.target.value)}
+                  placeholder="Saisissez votre réponse..."
+                  className="min-h-[60px] text-sm resize-none"
+                  autoFocus
+                />
+              )}
+            </div>
+
+            <Button size="sm" onClick={submitAnswer} disabled={!canAnswer} className="w-full">
+              <MessageSquare className="h-4 w-4 mr-1" />
+              Répondre
             </Button>
           </div>
         )}
 
-        {/* Input area */}
-        {!pddContent && (
-          <div className="border-t px-6 py-4 space-y-2 bg-muted/30">
-            <div className="flex gap-2">
-              <Textarea
-                placeholder="Répondez à l'agent Business Analyst..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                className="min-h-[60px] max-h-[120px] resize-none text-sm"
-                disabled={loading}
-              />
-            </div>
-            <Button size="sm" onClick={sendMessage} disabled={loading || !input.trim()} className="w-full gap-1.5">
-              <MessageSquare className="h-4 w-4" />
-              Répondre
+        {/* Generate PDD button */}
+        {showGeneratePDD && !loading && (
+          <div className="border-t px-6 py-3">
+            <Button onClick={generatePDD} disabled={pddGenerating} className="w-full gap-2" variant="default">
+              {pddGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              Générer le PDD ({answerCount} réponses collectées)
             </Button>
           </div>
         )}
