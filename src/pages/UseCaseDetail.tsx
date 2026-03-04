@@ -17,6 +17,7 @@ import {
   Repeat, Binary, Zap, FileInput, ArrowRightLeft,
   User, Wrench, BookOpen, ShieldAlert, LinkIcon,
   MessageSquare, Loader2, Star, Download, ThumbsUp, ThumbsDown, Bot, Sparkles,
+  FileText,
 } from "lucide-react";
 import { mockUseCaseDetails, TraceabilityLink, mockVariants, type MockVariant } from "@/data/useCaseDetailData";
 import { mockUseCases as mockDiscoveryData } from "@/data/mockAutomationDiscoveryData";
@@ -138,6 +139,24 @@ const UseCaseDetail = () => {
     enabled: !!id,
   });
 
+  // Load PDD document if it exists
+  const { data: pddDocument } = useQuery({
+    queryKey: ["pdd-document", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await supabase
+        .from("pdd_documents")
+        .select("id, title, html_content, status, created_at")
+        .eq("use_case_id", id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) return null;
+      return data;
+    },
+    enabled: !!id,
+  });
+
   // Use DB detail when available, fall back to mock for legacy mock IDs (uc1-uc7)
   const mockIds = ["uc1", "uc2", "uc3", "uc4", "uc5", "uc6", "uc7"];
   const defaultDetail = {
@@ -161,6 +180,19 @@ const UseCaseDetail = () => {
       ? mockUseCaseDetails[id]
       : mockUseCaseDetails["uc1"];
   const detail = rawDetail ? { ...defaultDetail, ...rawDetail } : null;
+
+  const handleDownloadPdd = () => {
+    if (!pddDocument?.html_content) return;
+    const blob = new Blob([pddDocument.html_content], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (win) {
+      win.addEventListener("load", () => {
+        setTimeout(() => win.print(), 500);
+      });
+    }
+    toast.success("PDD ouvert pour impression");
+  };
 
   const handleDownloadPdf = async () => {
     if (!useCase) return;
@@ -188,7 +220,6 @@ const UseCaseDetail = () => {
 
       if (error) throw error;
 
-      // data is HTML string — open in new window for printing
       const blob = new Blob([data], { type: "text/html" });
       const url = URL.createObjectURL(blob);
       const win = window.open(url, "_blank");
@@ -243,12 +274,20 @@ const UseCaseDetail = () => {
           <Button variant="ghost" size="sm" onClick={() => navigate("/automation-discovery")} className="text-muted-foreground">
             <ArrowLeft className="h-4 w-4 mr-1" /> {t.ucDetail.backToDiscovery}
           </Button>
-          {variants.length > 0 && (
-            <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isPdfLoading}>
-              {isPdfLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
-              {t.variants?.downloadPdf || "Télécharger PDF"}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {pddDocument?.html_content && (
+              <Button size="sm" onClick={handleDownloadPdd} className="gap-1.5">
+                <FileText className="h-4 w-4" />
+                Télécharger PDD
+              </Button>
+            )}
+            {variants.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isPdfLoading}>
+                {isPdfLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
+                {t.variants?.downloadPdf || "Télécharger PDF"}
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* ===== SECTION 1: Overview ===== */}
