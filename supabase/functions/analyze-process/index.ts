@@ -88,10 +88,15 @@ serve(async (req) => {
 
     if (processRes.error || !processRes.data) {
       return new Response(JSON.stringify({ error: "Process not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Log start
+    await supabase.from("agent_logs").insert({
+      process_id, agent_name: "discoverer", action: "analyze_use_cases", status: "started",
+      message: `Discoverer agent started — analyzing ${stepsRes.data?.length || 0} steps...`,
+    });
 
     const fullContext = buildContext(processRes, stepsRes, contextRes, chunksRes);
 
@@ -257,6 +262,13 @@ serve(async (req) => {
 
     // Update process status
     await supabase.from("uploaded_processes").update({ status: "approved" }).eq("id", process_id);
+
+    // Log completion
+    await supabase.from("agent_logs").insert({
+      process_id, agent_name: "discoverer", action: "analyze_use_cases", status: "completed",
+      message: `Generated ${use_cases.length} use cases with ${totalVariants} variants.`,
+      metadata: { use_cases_count: use_cases.length, variants_count: totalVariants },
+    });
 
     return new Response(
       JSON.stringify({

@@ -2,6 +2,8 @@ import { LayoutDashboard, Building2, Upload, GitBranch, Lightbulb, Globe } from 
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useLang } from "@/lib/i18n";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sidebar,
   SidebarContent,
@@ -16,6 +18,25 @@ import {
 export function AppSidebar() {
   const location = useLocation();
   const { t, lang, setLang } = useLang();
+
+  // Check for active agents (started but not completed recently)
+  const { data: activeAgents = [] } = useQuery({
+    queryKey: ["active-agents"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agent_logs")
+        .select("agent_name")
+        .eq("status", "started")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (error) return [];
+      return [...new Set(data.map((d: any) => d.agent_name))];
+    },
+    refetchInterval: 5000,
+  });
+
+  const hasActiveAgent = (agents: string[]) => activeAgents.some((a: string) => agents.includes(a));
+
 
   const navItems = [
     { title: t.nav.overview, url: "/", icon: LayoutDashboard },
@@ -47,21 +68,30 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      end={item.url === "/"}
-                      className="hover:bg-sidebar-accent"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="mr-2 h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {navItems.map((item) => {
+                const showDot =
+                  (item.url === "/process-analysis" && hasActiveAgent(["analyst", "clarifier"])) ||
+                  (item.url === "/automation-discovery" && hasActiveAgent(["discoverer"]));
+
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url}
+                        end={item.url === "/"}
+                        className="hover:bg-sidebar-accent"
+                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      >
+                        <item.icon className="mr-2 h-4 w-4" />
+                        <span className="flex-1">{item.title}</span>
+                        {showDot && (
+                          <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                        )}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

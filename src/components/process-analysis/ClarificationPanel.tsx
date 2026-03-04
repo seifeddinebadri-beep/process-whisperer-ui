@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Bot, CheckCircle2, Send, Sparkles, Loader2, ChevronLeft, ChevronRight, SkipForward, PenLine } from "lucide-react";
+import { Bot, CheckCircle2, Send, Sparkles, Loader2, PenLine, MessageSquare } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import {
   type ClarificationQuestion,
@@ -15,7 +15,8 @@ import {
 import type { ProcessContext } from "./types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
+import { AgentMessage } from "@/components/agents/AgentMessage";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ClarificationPanelProps {
   open: boolean;
@@ -24,359 +25,271 @@ interface ClarificationPanelProps {
   onApplyToContext: (updates: Partial<ProcessContext>) => void;
 }
 
-export function ClarificationPanel({
-  open,
-  onOpenChange,
-  processId,
-  onApplyToContext,
-}: ClarificationPanelProps) {
-  const { lang, t } = useLang();
-  const [questions, setQuestions] = useState<ClarificationQuestion[]>(
-    mockClarificationQuestions.map((q) => ({ ...q }))
-  );
-  const [currentStep, setCurrentStep] = useState(0);
-  const [isApplying, setIsApplying] = useState(false);
-  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+interface ConversationEntry {
+  type: "agent" | "user" | "question";
+  message?: string;
+  question?: ClarificationQuestion;
+  answer?: string;
+  timestamp: Date;
+}
 
-  // Fetch AI-generated questions when panel opens
-  useEffect(() => {
-    if (open && processId) {
-      setIsLoadingQuestions(true);
-      supabase.functions.invoke("generate-clarifications", {
-        body: { process_id: processId },
-      }).then(({ data, error }) => {
-        if (!error && data?.questions && Array.isArray(data.questions) && data.questions.length > 0) {
-          setQuestions(data.questions.map((q: any) => ({
-            ...q,
-            allowOther: true,
-            selectedOption: undefined,
-            customAnswer: undefined,
-          })));
-          setCurrentStep(0);
-        } else {
-          // Fallback to mock questions
-          console.warn("Using fallback clarification questions:", error);
-          setQuestions(mockClarificationQuestions.map((q) => ({ ...q })));
-        }
-      }).catch((e) => {
-        console.error("generate-clarifications error:", e);
-        setQuestions(mockClarificationQuestions.map((q) => ({ ...q })));
-      }).finally(() => {
-        setIsLoadingQuestions(false);
+export function ClarificationPanel({ open, onOpenChange, processId, onApplyToContext }: ClarificationPanelProps) {
+  const { lang, t } = useLang();
+  const [conversation, setConversation] = useState<ConversationEntry[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState<ClarificationQuestion | null>(null);
+  const [pendingQuestions, setPendingQuestions] = useState<ClarificationQuestion[]>([]);
+  const [answeredQuestions, setAnsweredQuestions] = useState<{ question: string; answer: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | undefined>();
+  const [customAnswer, setCustomAnswer] = useState("");
+  const [allDone, setAllDone] = useState(false);
+
+  const fetchQuestions = useCallback(async (history: { question: string; answer: string }[] = []) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("agent-clarify", {
+        body: { process_id: processId, conversation_history: history },
       });
+
+      if (!error && data?.questions?.length > 0) {
+        // Add agent intro message
+        setConversation((prev) => [
+          ...prev,
+          { type: "agent", message: data.agent_message || data.intro_message, timestamp: new Date() },
+        ]);
+
+        const questions = data.questions.map((q: any) => ({
+          ...q, allowOther: true, selectedOption: undefined, customAnswer: undefined,
+        }));
+
+        setPendingQuestions(questions.slice(1));
+        setCurrentQuestion(questions[0]);
+        setConversation((prev) => [
+          ...prev,
+          { type: "question", question: questions[0], timestamp: new Date() },
+        ]);
+      } else {
+        setConversation((prev) => [
+          ...prev,
+          { type: "agent", message: lang === "fr" ? "Je n'ai plus de questions. Vous pouvez appliquer les réponses au contexte." : "No more questions. You can apply answers to the context.", timestamp: new Date() },
+        ]);
+        setAllDone(true);
+      }
+    } catch (e) {
+      console.error("agent-clarify error:", e);
+      // Fallback to mock
+      const fallback = mockClarificationQuestions.map((q) => ({ ...q }));
+      setConversation((prev) => [
+        ...prev,
+        { type: "agent", message: lang === "fr" ? "Je suis l'agent Clarifier. J'ai quelques questions pour enrichir votre processus." : "I'm the Clarifier agent. I have some questions to enrich your process.", timestamp: new Date() },
+        { type: "question", question: fallback[0], timestamp: new Date() },
+      ]);
+      setPendingQuestions(fallback.slice(1));
+      setCurrentQuestion(fallback[0]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [processId, lang]);
+
+  useEffect(() => {
+    if (open && processId && conversation.length === 0) {
+      fetchQuestions([]);
     }
   }, [open, processId]);
 
-  const totalSteps = questions.length;
-  const currentQ = questions[currentStep];
+  const handleAnswer = () => {
+    if (!currentQuestion) return;
 
-  const isAnswered = (q: ClarificationQuestion) =>
-    (q.selectedOption && q.selectedOption !== "__other__") ||
-    (q.selectedOption === "__other__" && q.customAnswer?.trim());
+    const answerText = selectedOption === "__other__" ? customAnswer.trim() : (selectedOption || "");
+    if (!answerText) return;
 
-  const answeredCount = useMemo(
-    () => questions.filter((q) => isAnswered(q)).length,
-    [questions]
-  );
+    // Add user answer to conversation
+    setConversation((prev) => [
+      ...prev,
+      { type: "user", answer: answerText, timestamp: new Date() },
+    ]);
 
-  const currentAnswered = currentQ ? isAnswered(currentQ) : false;
-  const isLastStep = currentStep === totalSteps - 1;
+    const newAnswered = [...answeredQuestions, { question: currentQuestion.question, answer: answerText }];
+    setAnsweredQuestions(newAnswered);
+    setSelectedOption(undefined);
+    setCustomAnswer("");
 
-  const handleSelectOption = (optionLabel: string) => {
-    setQuestions((prev) =>
-      prev.map((q, i) =>
-        i === currentStep
-          ? { ...q, selectedOption: q.selectedOption === optionLabel ? undefined : optionLabel, customAnswer: optionLabel === "__other__" ? q.customAnswer : undefined }
-          : q
-      )
-    );
+    // Add agent acknowledgment
+    setConversation((prev) => [
+      ...prev,
+      { type: "agent", message: lang === "fr" ? "Compris, merci." : "Got it, thanks.", timestamp: new Date() },
+    ]);
+
+    // Next question or fetch follow-ups
+    if (pendingQuestions.length > 0) {
+      const next = pendingQuestions[0];
+      setPendingQuestions((prev) => prev.slice(1));
+      setCurrentQuestion(next);
+      setConversation((prev) => [
+        ...prev,
+        { type: "question", question: next, timestamp: new Date() },
+      ]);
+    } else {
+      setCurrentQuestion(null);
+      // Fetch follow-up questions
+      fetchQuestions(newAnswered);
+    }
   };
 
-  const handleCustomAnswerChange = (value: string) => {
-    setQuestions((prev) =>
-      prev.map((q, i) =>
-        i === currentStep ? { ...q, customAnswer: value } : q
-      )
-    );
-  };
-
-  const handleNext = () => {
-    if (!isLastStep) setCurrentStep((s) => s + 1);
-  };
-
-  const handlePrev = () => {
-    if (currentStep > 0) setCurrentStep((s) => s - 1);
-  };
-
-  const handleSkip = () => {
-    if (!isLastStep) setCurrentStep((s) => s + 1);
-  };
-
-  const getAnswerText = (q: ClarificationQuestion): string => {
-    if (q.selectedOption === "__other__") return q.customAnswer?.trim() || "";
-    return q.selectedOption || "";
-  };
-
-  const handleApplyToContext = () => {
+  const handleApply = () => {
     setIsApplying(true);
-    const answered = questions.filter((q) => isAnswered(q));
     const grouped: Record<string, string[]> = {};
-    for (const q of answered) {
-      if (!grouped[q.category]) grouped[q.category] = [];
-      grouped[q.category].push(`Q: ${q.question}\nA: ${getAnswerText(q)}`);
+    for (const a of answeredQuestions) {
+      // Simple grouping
+      const key = "general";
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(`Q: ${a.question}\nA: ${a.answer}`);
     }
 
     const updates: Partial<ProcessContext> = {};
-    if (grouped.volume_detail) updates.volumeAndFrequency = grouped.volume_detail.join("\n\n");
-    if (grouped.business_rule) updates.knownConstraints = grouped.business_rule.join("\n\n");
-    if (grouped.exception_handling || grouped.missing_context) {
-      updates.painPointsSummary = [
-        ...(grouped.exception_handling || []),
-        ...(grouped.missing_context || []),
-      ].join("\n\n");
-    }
-    if (grouped.ambiguity) updates.assumptions = grouped.ambiguity.join("\n\n");
-    if (grouped.stakeholder) updates.stakeholderNotes = grouped.stakeholder.join("\n\n");
+    const allText = answeredQuestions.map((a) => `Q: ${a.question}\nA: ${a.answer}`).join("\n\n");
+    updates.stakeholderNotes = allText;
 
     onApplyToContext(updates);
     setTimeout(() => {
       setIsApplying(false);
       onOpenChange(false);
-      setCurrentStep(0);
+      setConversation([]);
+      setCurrentQuestion(null);
+      setPendingQuestions([]);
+      setAnsweredQuestions([]);
+      setAllDone(false);
     }, 600);
   };
 
-  const getCategoryLabel = (cat: ClarificationCategory) =>
-    lang === "fr" ? categoryLabels[cat].fr : categoryLabels[cat].en;
-
-  if (isLoadingQuestions) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-lg p-0 flex flex-col">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
-                <Bot className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <SheetTitle className="text-base">{t.clarification.title}</SheetTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">{t.clarification.subtitle}</p>
-              </div>
-            </div>
-          </SheetHeader>
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center space-y-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-              <p className="text-sm text-muted-foreground">
-                {lang === "fr" ? "Génération des questions par l'IA..." : "AI generating questions..."}
-              </p>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-    );
-  }
-
-  if (!currentQ) return null;
-
-  const isOtherSelected = currentQ.selectedOption === "__other__";
+  const isOtherSelected = selectedOption === "__other__";
+  const canAnswer = selectedOption && (selectedOption !== "__other__" || customAnswer.trim());
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={(v) => {
+      if (!v) {
+        setConversation([]);
+        setCurrentQuestion(null);
+        setPendingQuestions([]);
+        setAnsweredQuestions([]);
+        setAllDone(false);
+      }
+      onOpenChange(v);
+    }}>
       <SheetContent className="w-full sm:max-w-lg p-0 flex flex-col">
         {/* Header */}
-        <SheetHeader className="px-6 pt-6 pb-4 border-b space-y-3">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
-              <Bot className="h-5 w-5 text-primary" />
+            <div className="h-9 w-9 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+              <Bot className="h-5 w-5 text-violet-600" />
             </div>
             <div>
-              <SheetTitle className="text-base">{t.clarification.title}</SheetTitle>
+              <SheetTitle className="text-base">Agent Clarifier</SheetTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {t.clarification.subtitle}
+                {answeredQuestions.length} {lang === "fr" ? "réponses collectées" : "answers collected"}
               </p>
             </div>
-          </div>
-
-          {/* Step indicators */}
-          <div className="flex items-center gap-1.5">
-            {questions.map((q, i) => {
-              const qAnswered = isAnswered(q);
-              const isCurrent = i === currentStep;
-              return (
-                <button
-                  key={q.id}
-                  onClick={() => setCurrentStep(i)}
-                  className={`h-2 flex-1 rounded-full transition-all duration-300 ${
-                    isCurrent
-                      ? "bg-primary scale-y-150"
-                      : qAnswered
-                      ? "bg-primary/40"
-                      : "bg-muted"
-                  }`}
-                  aria-label={`Step ${i + 1}`}
-                />
-              );
-            })}
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              Question {currentStep + 1}/{totalSteps}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {answeredCount} {lang === "fr" ? "répondue(s)" : "answered"}
-            </span>
           </div>
         </SheetHeader>
 
-        {/* Current question */}
-        <div className="flex-1 flex flex-col px-6 py-6 overflow-auto">
-          <div className="flex-1 flex flex-col gap-5">
-            {/* Category badge */}
-            <div className="flex items-center gap-2">
-              <Badge
-                variant="secondary"
-                className={`text-xs px-2 py-0.5 ${categoryColors[currentQ.category]}`}
-              >
-                {getCategoryLabel(currentQ.category)}
-              </Badge>
-              {currentAnswered && (
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-              )}
-            </div>
-
-            {/* Agent question */}
-            <div className="flex gap-3">
-              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Sparkles className="h-4 w-4 text-primary" />
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium leading-relaxed">{currentQ.question}</p>
-                <p className="text-xs text-muted-foreground italic">💡 {currentQ.why}</p>
-              </div>
-            </div>
-
-            {/* Multi-choice options */}
-            <div className="space-y-2 mt-1">
-              <p className="text-xs font-medium text-muted-foreground">{t.clarification.selectAnswer}</p>
-              {currentQ.options.map((opt) => {
-                const isSelected = currentQ.selectedOption === opt.label;
+        {/* Conversation timeline */}
+        <ScrollArea className="flex-1 px-6 py-4">
+          <div className="space-y-4">
+            {conversation.map((entry, i) => {
+              if (entry.type === "agent") {
                 return (
-                  <button
-                    key={opt.label}
-                    onClick={() => handleSelectOption(opt.label)}
-                    className={cn(
-                      "w-full text-left rounded-lg border-2 px-4 py-3 transition-all duration-200",
-                      isSelected
-                        ? "border-primary bg-primary/5 shadow-sm"
-                        : "border-border hover:border-primary/40 hover:bg-muted/50"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        "mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors",
-                        isSelected ? "border-primary bg-primary" : "border-muted-foreground/30"
-                      )}>
-                        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-primary-foreground" />}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{opt.label}</p>
-                        {opt.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
-                        )}
-                      </div>
-                    </div>
-                  </button>
+                  <AgentMessage
+                    key={i}
+                    agent="clarifier"
+                    status="done"
+                    message={entry.message || ""}
+                    timestamp={entry.timestamp}
+                  />
                 );
-              })}
-
-              {/* Other option */}
-              {currentQ.allowOther !== false && (
-                <div>
-                  <button
-                    onClick={() => handleSelectOption("__other__")}
-                    className={cn(
-                      "w-full text-left rounded-lg border-2 px-4 py-3 transition-all duration-200",
-                      isOtherSelected
-                        ? "border-primary bg-primary/5 shadow-sm"
-                        : "border-border hover:border-primary/40 hover:bg-muted/50"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        "mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors",
-                        isOtherSelected ? "border-primary bg-primary" : "border-muted-foreground/30"
-                      )}>
-                        {isOtherSelected && <PenLine className="h-3 w-3 text-primary-foreground" />}
-                      </div>
-                      <p className="text-sm font-medium">{t.clarification.other}</p>
+              }
+              if (entry.type === "user") {
+                return (
+                  <div key={i} className="flex justify-end">
+                    <div className="bg-primary text-primary-foreground rounded-lg px-4 py-2 max-w-[80%]">
+                      <p className="text-sm">{entry.answer}</p>
                     </div>
-                  </button>
-                  {isOtherSelected && (
-                    <Textarea
-                      value={currentQ.customAnswer || ""}
-                      onChange={(e) => handleCustomAnswerChange(e.target.value)}
-                      placeholder={t.clarification.otherPlaceholder}
-                      className="mt-2 min-h-[80px] text-sm resize-none"
-                      rows={3}
-                      autoFocus
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+                  </div>
+                );
+              }
+              return null;
+            })}
 
-        {/* Navigation footer */}
-        <div className="border-t px-6 py-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handlePrev}
-              disabled={currentStep === 0}
-            >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              {lang === "fr" ? "Précédent" : "Previous"}
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSkip}
-              disabled={isLastStep}
-              className="text-muted-foreground"
-            >
-              <SkipForward className="h-4 w-4 mr-1" />
-              {lang === "fr" ? "Passer" : "Skip"}
-            </Button>
-
-            {isLastStep ? (
-              <Button
-                size="sm"
-                onClick={handleApplyToContext}
-                disabled={answeredCount === 0 || isApplying}
-              >
-                {isApplying ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4 mr-1" />
-                )}
-                {t.clarification.apply}
-              </Button>
-            ) : (
-              <Button size="sm" onClick={handleNext}>
-                {lang === "fr" ? "Suivant" : "Next"}
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+            {isLoading && (
+              <AgentMessage agent="clarifier" status="thinking" message={lang === "fr" ? "Réflexion en cours..." : "Thinking..."} />
             )}
           </div>
+        </ScrollArea>
 
-          <p className="text-[11px] text-center text-muted-foreground">
-            {t.clarification.applyHint}
-          </p>
-        </div>
+        {/* Current question input area */}
+        {currentQuestion && !isLoading && (
+          <div className="border-t px-6 py-4 space-y-3 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className={`text-xs ${categoryColors[currentQuestion.category]}`}>
+                {lang === "fr" ? categoryLabels[currentQuestion.category].fr : categoryLabels[currentQuestion.category].en}
+              </Badge>
+            </div>
+            <p className="text-sm font-medium">{currentQuestion.question}</p>
+            <p className="text-xs text-muted-foreground italic">💡 {currentQuestion.why}</p>
+
+            <div className="space-y-1.5 max-h-48 overflow-auto">
+              {currentQuestion.options.map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => { setSelectedOption(opt.label); setCustomAnswer(""); }}
+                  className={cn(
+                    "w-full text-left rounded-lg border px-3 py-2 transition-all text-sm",
+                    selectedOption === opt.label
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  )}
+                >
+                  {opt.label}
+                  {opt.description && <span className="block text-xs text-muted-foreground">{opt.description}</span>}
+                </button>
+              ))}
+              <button
+                onClick={() => setSelectedOption("__other__")}
+                className={cn(
+                  "w-full text-left rounded-lg border px-3 py-2 transition-all text-sm",
+                  isOtherSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                )}
+              >
+                <PenLine className="h-3 w-3 inline mr-1" />
+                {t.clarification.other}
+              </button>
+              {isOtherSelected && (
+                <Textarea
+                  value={customAnswer}
+                  onChange={(e) => setCustomAnswer(e.target.value)}
+                  placeholder={t.clarification.otherPlaceholder}
+                  className="min-h-[60px] text-sm resize-none"
+                  autoFocus
+                />
+              )}
+            </div>
+
+            <Button size="sm" onClick={handleAnswer} disabled={!canAnswer} className="w-full">
+              <MessageSquare className="h-4 w-4 mr-1" />
+              {lang === "fr" ? "Répondre" : "Answer"}
+            </Button>
+          </div>
+        )}
+
+        {/* Apply button when done */}
+        {(allDone || (!currentQuestion && !isLoading && answeredQuestions.length > 0)) && (
+          <div className="border-t px-6 py-4">
+            <Button onClick={handleApply} disabled={isApplying || answeredQuestions.length === 0} className="w-full">
+              {isApplying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+              {t.clarification.apply} ({answeredQuestions.length} {lang === "fr" ? "réponses" : "answers"})
+            </Button>
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
