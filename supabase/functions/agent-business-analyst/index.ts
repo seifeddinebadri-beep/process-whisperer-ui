@@ -46,10 +46,12 @@ serve(async (req) => {
       });
     }
 
-    const [variantsRes, stepsRes, contextRes] = await Promise.all([
+    const [variantsRes, stepsRes, contextRes, kbToolsRes, clarifierLogsRes] = await Promise.all([
       supabase.from("automation_variants").select("*").eq("use_case_id", use_case_id).order("variant_number"),
       supabase.from("process_steps").select("*").eq("process_id", useCase.process_id).order("step_order"),
       supabase.from("process_context").select("*").eq("process_id", useCase.process_id).maybeSingle(),
+      supabase.from("tools").select("name, type, purpose").limit(50),
+      supabase.from("agent_logs").select("message").eq("process_id", useCase.process_id).in("agent_name", ["clarifier", "business_analyst"]).eq("status", "completed").order("created_at", { ascending: false }).limit(15),
     ]);
 
     // Get or create conversation
@@ -108,6 +110,21 @@ serve(async (req) => {
       contextParts.push(`\nObjectif: ${ctx.process_objective || "N/A"}`);
       contextParts.push(`Contraintes: ${ctx.known_constraints || "N/A"}`);
       contextParts.push(`Points de douleur: ${ctx.pain_points_summary || "N/A"}`);
+      if (ctx.stakeholder_notes) contextParts.push(`Notes clarification: ${ctx.stakeholder_notes}`);
+    }
+
+    // Add KB tools
+    const kbTools = kbToolsRes.data || [];
+    if (kbTools.length > 0) {
+      contextParts.push("\n--- Outils connus (Base de connaissances) ---");
+      for (const t of kbTools) contextParts.push(`- ${t.name} (${t.type || "N/A"}): ${t.purpose || ""}`);
+    }
+
+    // Add previous agent findings
+    const prevLogs = clarifierLogsRes.data || [];
+    if (prevLogs.length > 0) {
+      contextParts.push("\n--- Informations déjà collectées ---");
+      for (const l of prevLogs) if (l.message) contextParts.push(`- ${l.message}`);
     }
 
     const isFirstMessage = !user_message;
@@ -127,11 +144,21 @@ serve(async (req) => {
         : `Processing user response: "${user_message?.slice(0, 80)}..."`,
     });
 
-    // Determine if we should generate PDD or continue conversation
-    const shouldGeneratePDD = conversationMessages.length >= 8 && user_message;
+    // Count actual user answers (not skips)
+    const userAnswers = conversationMessages.filter((m: any) => m.role === "user" && !m.content.includes("Question passée") && !m.content.includes("passe cette question")).length;
+    const shouldGeneratePDD = userAnswers >= 3 && user_message;
+    const MAX_BA_QUESTIONS = 5;
+    const totalAsked = Math.floor(conversationMessages.length / 2); // approximate
 
     const systemPrompt = `Tu es l'agent Business Analyst, un expert senior en analyse métier et transformation digitale.
 Ton rôle est de challenger l'approche d'automatisation proposée pour s'assurer qu'elle est robuste, réaliste et bien pensée.
+
+IMPORTANT — BUDGET DE QUESTIONS :
+Tu as un budget MAXIMUM de ${MAX_BA_QUESTIONS} questions au total. Tu en as déjà posé environ ${totalAsked}.
+${totalAsked >= MAX_BA_QUESTIONS ? "Tu as atteint la limite. Retourne pdd_ready=true avec un message de synthèse." : `Il te reste ${MAX_BA_QUESTIONS - totalAsked} questions maximum.`}
+Ne pose une question que si elle a une FINALITÉ CLAIRE pour la qualité du PDD final.
+NE POSE PAS de question si l'information est déjà disponible dans le contexte, la base de connaissances, ou les notes de clarification ci-dessus.
+Privilégie la QUALITÉ à la QUANTITÉ.
 
 Tu dois :
 1. Questionner les règles métier : sont-elles complètes ? Y a-t-il des cas limites non couverts ?
