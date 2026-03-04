@@ -98,6 +98,26 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
     }
   }, [open, processId]);
 
+  const saveAnswersToDb = useCallback(async (answers: { question: string; answer: string }[]) => {
+    if (answers.length === 0) return;
+    const allText = answers.map((a) => `Q: ${a.question}\nA: ${a.answer}`).join("\n\n");
+    try {
+      const { data: existing } = await supabase
+        .from("process_context")
+        .select("id, stakeholder_notes")
+        .eq("process_id", processId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from("process_context").update({ stakeholder_notes: allText }).eq("id", existing.id);
+      } else {
+        await supabase.from("process_context").insert({ process_id: processId, stakeholder_notes: allText });
+      }
+    } catch (e) {
+      console.error("Failed to save clarification answers:", e);
+    }
+  }, [processId]);
+
   const handleAnswer = () => {
     if (!currentQuestion) return;
 
@@ -114,6 +134,9 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
     setAnsweredQuestions(newAnswered);
     setSelectedOption(undefined);
     setCustomAnswer("");
+
+    // Save progressively to database
+    saveAnswersToDb(newAnswered);
 
     // Add agent acknowledgment
     setConversation((prev) => [
