@@ -93,4 +93,17 @@ export const mockUseCases: MockUseCase[] = [
     uploaded_processes: { file_name: "candidate_screening_events.csv", status: "analyzed" },
     automation_variants: [{ id: "v11" }, { id: "v12" }],
   },
+  {
+    id: "uc7",
+    title: "Automatisation de la création de tickets téléphoniques ITSM",
+    description: "Automatisation du processus de création et gestion des tickets téléphoniques dans OTOBO ITSM, incluant la saisie automatique des champs, la consultation CRM et la validation.",
+    impact: "high",
+    complexity: "medium",
+    roi_estimate: "Réduction de 75% du temps de saisie par ticket",
+    tools_suggested: ["OTOBO ITSM", "SharePoint Excel CRM", "Outlook", "UiPath", "Power Automate"],
+    process_id: "p3",
+    created_at: "2026-03-01T09:00:00",
+    uploaded_processes: { file_name: "Gestion_Tickets_Telephoniques.json", status: "analyzed" },
+    automation_variants: [{ id: "v13" }, { id: "v14" }, { id: "v15" }],
+  },
 ];
