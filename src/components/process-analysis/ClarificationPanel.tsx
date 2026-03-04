@@ -160,6 +160,30 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
     }
   };
 
+  const handleSkip = () => {
+    if (!currentQuestion) return;
+
+    setConversation((prev) => [
+      ...prev,
+      { type: "user", answer: lang === "fr" ? "(Question passée)" : "(Skipped)", timestamp: new Date() },
+    ]);
+    setSelectedOption(undefined);
+    setCustomAnswer("");
+
+    if (pendingQuestions.length > 0) {
+      const next = pendingQuestions[0];
+      setPendingQuestions((prev) => prev.slice(1));
+      setCurrentQuestion(next);
+      setConversation((prev) => [
+        ...prev,
+        { type: "question", question: next, timestamp: new Date() },
+      ]);
+    } else {
+      setCurrentQuestion(null);
+      fetchQuestions(answeredQuestions);
+    }
+  };
+
   const handleApply = () => {
     setIsApplying(true);
     const grouped: Record<string, string[]> = {};
@@ -297,10 +321,15 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
               )}
             </div>
 
-            <Button size="sm" onClick={handleAnswer} disabled={!canAnswer} className="w-full">
-              <MessageSquare className="h-4 w-4 mr-1" />
-              {lang === "fr" ? "Répondre" : "Answer"}
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={handleSkip} className="flex-shrink-0">
+                {lang === "fr" ? "Passer" : "Skip"}
+              </Button>
+              <Button size="sm" onClick={handleAnswer} disabled={!canAnswer} className="flex-1">
+                <MessageSquare className="h-4 w-4 mr-1" />
+                {lang === "fr" ? "Répondre" : "Answer"}
+              </Button>
+            </div>
           </div>
         )}
 
