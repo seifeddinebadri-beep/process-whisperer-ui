@@ -45,11 +45,13 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
   const [selectedOption, setSelectedOption] = useState<string | undefined>();
   const [customAnswer, setCustomAnswer] = useState("");
   const [allDone, setAllDone] = useState(false);
+  const [showCheckpoint, setShowCheckpoint] = useState(false);
 
   const [totalQuestionsAsked, setTotalQuestionsAsked] = useState(0);
 
   const fetchQuestions = useCallback(async (history: { question: string; answer: string }[] = [], questionsAskedSoFar: number = 0) => {
     setIsLoading(true);
+    setShowCheckpoint(false);
     try {
       const { data, error } = await supabase.functions.invoke("agent-clarify", {
         body: { process_id: processId, conversation_history: history, total_questions_asked: questionsAskedSoFar },
@@ -159,7 +161,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
       { type: "agent", message: lang === "fr" ? "Compris, merci." : "Got it, thanks.", timestamp: new Date() },
     ]);
 
-    // Next question or fetch follow-ups
+    // Next question or show checkpoint
     if (pendingQuestions.length > 0) {
       const next = pendingQuestions[0];
       setPendingQuestions((prev) => prev.slice(1));
@@ -170,8 +172,15 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
       ]);
     } else {
       setCurrentQuestion(null);
-      // Fetch follow-up questions with current total
-      fetchQuestions(newAnswered, totalQuestionsAsked);
+      // Show checkpoint instead of auto-fetching
+      const checkpointMsg = lang === "fr"
+        ? "J'ai posé 5 questions. Souhaitez-vous continuer la clarification ou passer à la découverte d'automatisation ?"
+        : "I've asked 5 questions. Would you like to continue clarification or proceed to automation discovery?";
+      setConversation((prev) => [
+        ...prev,
+        { type: "agent", message: checkpointMsg, timestamp: new Date() },
+      ]);
+      setShowCheckpoint(true);
     }
   };
 
@@ -196,7 +205,14 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
       ]);
     } else {
       setCurrentQuestion(null);
-      fetchQuestions(answeredQuestions, totalQuestionsAsked);
+      const checkpointMsg = lang === "fr"
+        ? "J'ai posé 5 questions. Souhaitez-vous continuer la clarification ou passer à la découverte d'automatisation ?"
+        : "I've asked 5 questions. Would you like to continue clarification or proceed to automation discovery?";
+      setConversation((prev) => [
+        ...prev,
+        { type: "agent", message: checkpointMsg, timestamp: new Date() },
+      ]);
+      setShowCheckpoint(true);
     }
   };
 
@@ -223,6 +239,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
       setPendingQuestions([]);
       setAnsweredQuestions([]);
       setAllDone(false);
+      setShowCheckpoint(false);
     }, 600);
   };
 
@@ -237,6 +254,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
         setPendingQuestions([]);
         setAnsweredQuestions([]);
         setAllDone(false);
+        setShowCheckpoint(false);
         setSkippedCount(0);
         setTotalQuestionsAsked(0);
       }
@@ -352,8 +370,34 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
           </div>
         )}
 
-        {/* Apply button when done */}
-        {(allDone || (!currentQuestion && !isLoading && answeredQuestions.length > 0)) && (
+        {/* Checkpoint: continue or proceed */}
+        {showCheckpoint && !isLoading && (
+          <div className="border-t px-6 py-4 space-y-3 bg-muted/30">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setConversation((prev) => [
+                    ...prev,
+                    { type: "user", answer: lang === "fr" ? "Continuer la clarification" : "Continue clarification", timestamp: new Date() },
+                  ]);
+                  fetchQuestions(answeredQuestions, totalQuestionsAsked);
+                }}
+              >
+                <Sparkles className="h-4 w-4 mr-1" />
+                {lang === "fr" ? "Continuer" : "Continue"}
+              </Button>
+              <Button className="flex-1" onClick={handleApply} disabled={isApplying}>
+                {isApplying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                {lang === "fr" ? "Passer à la découverte" : "Proceed to discovery"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Apply button when all done (session_complete from backend) */}
+        {allDone && !showCheckpoint && (
           <div className="border-t px-6 py-4">
             <Button onClick={handleApply} disabled={isApplying || answeredQuestions.length === 0} className="w-full">
               {isApplying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
