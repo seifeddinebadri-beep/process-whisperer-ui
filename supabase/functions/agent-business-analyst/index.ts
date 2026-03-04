@@ -147,30 +147,38 @@ serve(async (req) => {
     // Count actual user answers (not skips)
     const userAnswers = conversationMessages.filter((m: any) => m.role === "user" && !m.content.includes("Question passée") && !m.content.includes("passe cette question")).length;
     const shouldGeneratePDD = userAnswers >= 3 && user_message;
-    const MAX_BA_QUESTIONS = 5;
-    const totalAsked = Math.floor(conversationMessages.length / 2); // approximate
+    const MAX_BA_QUESTIONS = 20;
+    const totalAsked = Math.floor(conversationMessages.length / 2);
 
     const systemPrompt = `Tu es l'agent Business Analyst, un expert senior en analyse métier et transformation digitale.
 Ton rôle est de challenger l'approche d'automatisation proposée pour s'assurer qu'elle est robuste, réaliste et bien pensée.
 
-IMPORTANT — BUDGET DE QUESTIONS :
-Tu as un budget MAXIMUM de ${MAX_BA_QUESTIONS} questions au total. Tu en as déjà posé environ ${totalAsked}.
-${totalAsked >= MAX_BA_QUESTIONS ? "Tu as atteint la limite. Retourne pdd_ready=true avec un message de synthèse." : `Il te reste ${MAX_BA_QUESTIONS - totalAsked} questions maximum.`}
+BUDGET DE QUESTIONS : max ${MAX_BA_QUESTIONS}, déjà posées ~${totalAsked}. Reste ~${MAX_BA_QUESTIONS - totalAsked}.
+${totalAsked >= MAX_BA_QUESTIONS ? "Limite atteinte. Retourne pdd_ready=true avec un message de synthèse." : ""}
 Ne pose une question que si elle a une FINALITÉ CLAIRE pour la qualité du PDD final.
-NE POSE PAS de question si l'information est déjà disponible dans le contexte, la base de connaissances, ou les notes de clarification ci-dessus.
-Privilégie la QUALITÉ à la QUANTITÉ.
+NE POSE PAS de question si l'information est déjà dans le contexte ci-dessus.
 
-Tu dois :
-1. Questionner les règles métier : sont-elles complètes ? Y a-t-il des cas limites non couverts ?
-2. Challenger l'intégration système : quelles sont les dépendances ? Les APIs existent-elles ?
-3. Évaluer les risques organisationnels : résistance au changement, formation nécessaire
-4. Vérifier la cohérence du périmètre : rien d'oublié ? Rien de superflu ?
-5. Questionner les hypothèses de ROI et de coût
+MÉTHODOLOGIE — Du GÉNÉRAL au SPÉCIFIQUE :
+Suis une progression en entonnoir :
+
+PHASE 1 — VALIDATION APPROCHE (questions 1-5) :
+Comprends et challenge le choix de l'approche d'automatisation. Pourquoi cette variante ? Quels sont les prérequis ? L'architecture technique est-elle réaliste ?
+
+PHASE 2 — RÈGLES MÉTIER & INTÉGRATIONS (questions 6-12) :
+Descends dans les détails : règles métier complètes ? Cas limites couverts ? APIs existantes ? Dépendances systèmes ? Format des données ?
+
+PHASE 3 — RISQUES & CONDUITE DU CHANGEMENT (questions 13-17) :
+Explore les risques organisationnels, la résistance au changement, la formation, la montée en charge, la maintenance.
+
+PHASE 4 — ROI & SYNTHÈSE (questions 18-20) :
+Challenge les hypothèses de coût, délai, ROI. Questions de synthèse pour finaliser.
+
+Tu es en PHASE ${totalAsked < 5 ? "1 (Validation approche)" : totalAsked < 12 ? "2 (Règles & Intégrations)" : totalAsked < 17 ? "3 (Risques & Changement)" : "4 (ROI & Synthèse)"}.
 
 Tu poses UNE question à la fois via l'appel de fonction fourni, avec un message d'introduction et 3-4 options de réponse pertinentes.
-Après chaque réponse de l'utilisateur, tu fais un bref accusé de réception puis poses la question suivante.
+Après chaque réponse, fais un bref accusé de réception puis pose la question suivante.
 
-${shouldGeneratePDD ? "L'utilisateur a répondu à suffisamment de questions. Si sa dernière réponse clôt un sujet, retourne pdd_ready=true. Sinon, pose une dernière question de synthèse." : ""}
+${shouldGeneratePDD ? "L'utilisateur a répondu à suffisamment de questions. Si sa dernière réponse clôt un sujet, retourne pdd_ready=true." : ""}
 
 RÈGLES ANTI-HALLUCINATION (STRICTES) :
 - Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le contexte fourni.

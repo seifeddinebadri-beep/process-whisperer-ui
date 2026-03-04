@@ -46,7 +46,7 @@ serve(async (req) => {
     });
 
     const totalQuestionsAsked = body.total_questions_asked || 0;
-    const MAX_QUESTIONS = 8; // Hard cap across all rounds
+    const MAX_QUESTIONS = 20; // Hard cap across all rounds
 
     // If we've already asked enough, stop
     if (totalQuestionsAsked >= MAX_QUESTIONS) {
@@ -159,23 +159,30 @@ serve(async (req) => {
               "Ton rôle est de comprendre en détail le processus TEL QU'IL EST AUJOURD'HUI (as-is). " +
               "Tu ne dois JAMAIS poser de questions sur l'automatisation, les outils futurs, ou comment le processus pourrait être amélioré. " +
               "\n\nIMPORTANT — BUDGET DE QUESTIONS :\n" +
-              `Tu disposes d'un budget de ${remainingBudget} questions MAXIMUM pour cette série. ` +
+              `Tu disposes d'un budget de ${remainingBudget} questions restantes (max ${MAX_QUESTIONS} au total, ${totalQuestionsAsked} déjà posées). ` +
               "Ne pose une question que si elle a une FINALITÉ CLAIRE et ACTIONNABLE pour l'analyse. " +
               "NE POSE PAS de question si l'information est déjà disponible dans le contexte, la base de connaissances, ou les logs ci-dessus. " +
               "Si tu estimes avoir suffisamment d'informations, retourne session_complete=true et un message de clôture. " +
               "Privilégie la QUALITÉ à la QUANTITÉ : mieux vaut 2 questions percutantes que 6 questions vagues.\n\n" +
-              "Tes questions doivent couvrir 4 axes, DANS CET ORDRE DE PRIORITÉ :\n" +
-              "1. CONTEXTE MÉTIER (commence toujours par là) : Valide ta compréhension du contexte business. " +
-              "Reformule ce que tu as compris de l'objectif du processus, du périmètre, et des parties prenantes, puis demande confirmation ou correction. " +
-              "2. TRAITEMENT HUMAIN : Comment chaque tâche est concrètement réalisée par les humains au quotidien — " +
-              "qui fait quoi, dans quel ordre, avec quels outils existants, quelles sont les étapes manuelles, les copier-coller, les vérifications visuelles. " +
-              "3. RÈGLES MÉTIER : Les règles de gestion appliquées aujourd'hui — critères de décision, seuils, conditions, validations, contrôles qualité. " +
-              "4. EXCEPTIONS ET CAS PARTICULIERS : Les cas hors norme, les erreurs fréquentes, les contournements, les cas limites rencontrés par les équipes. " +
-              "\n" +
+              "MÉTHODOLOGIE — Du GÉNÉRAL au SPÉCIFIQUE :\n" +
+              "Tu dois suivre une progression structurée en entonnoir. Commence large, puis affine.\n\n" +
+              "PHASE 1 — CONTEXTE GÉNÉRAL (questions 1-4) :\n" +
+              "Valide ta compréhension globale du processus. Reformule l'objectif, le périmètre, les parties prenantes principales. " +
+              "Demande confirmation ou correction. Comprends POURQUOI ce processus existe et QUI il sert.\n\n" +
+              "PHASE 2 — TRAITEMENT HUMAIN (questions 5-10) :\n" +
+              "Descends dans le détail opérationnel. Comment chaque tâche est concrètement réalisée au quotidien : " +
+              "qui fait quoi, dans quel ordre, avec quels outils existants, quelles manipulations manuelles (copier-coller, saisie, vérification visuelle), " +
+              "combien de temps prend chaque étape, quels sont les goulots d'étranglement.\n\n" +
+              "PHASE 3 — RÈGLES MÉTIER (questions 11-15) :\n" +
+              "Identifie les règles de gestion : critères de décision, seuils, conditions, validations, contrôles qualité. " +
+              "Quand une décision est prise, sur quels critères ? Y a-t-il des matrices de décision, des barèmes, des tables de référence ?\n\n" +
+              "PHASE 4 — EXCEPTIONS ET CAS LIMITES (questions 16-20) :\n" +
+              "Explore les cas hors norme : erreurs fréquentes, contournements, cas limites, situations d'urgence, " +
+              "que se passe-t-il quand une donnée manque ou est incorrecte, quels sont les scénarios de fallback.\n\n" +
+              `Tu es actuellement en PHASE ${totalQuestionsAsked < 4 ? "1 (Contexte général)" : totalQuestionsAsked < 10 ? "2 (Traitement humain)" : totalQuestionsAsked < 15 ? "3 (Règles métier)" : "4 (Exceptions)"}.\n\n` +
               (isFirstRound
-                ? `Génère ${Math.min(remainingBudget, 4)} questions de clarification. Commence OBLIGATOIREMENT par 1-2 questions de validation du contexte métier (axe 1), ` +
-                  "puis enchaîne avec les autres axes. "
-                : `Génère ${Math.min(remainingBudget, 2)} questions de suivi UNIQUEMENT si des lacunes importantes subsistent. Sinon retourne session_complete=true. `) +
+                ? `Génère ${Math.min(remainingBudget, 4)} questions pour cette phase. `
+                : `Génère ${Math.min(remainingBudget, 3)} questions de suivi pour la phase courante. Si la phase est couverte, passe à la suivante. Si tout est couvert, retourne session_complete=true. `) +
               "Chaque question doit cibler un manque d'information spécifique sur le fonctionnement actuel. " +
               "Pour chaque question, propose 3-4 options de réponse avec des descriptions réalistes. " +
               "Génère aussi un message d'accueil (agent_message) pour le début de la conversation. " +
