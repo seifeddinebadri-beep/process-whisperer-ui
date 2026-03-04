@@ -83,7 +83,18 @@ serve(async (req) => {
               "En plus de l'extraction, fournis : un résumé de ton analyse (agent_summary), un score de confiance (0-100), " +
               "et une liste des lacunes identifiées (gaps_identified). " +
               "Le résumé doit expliquer ce que tu as trouvé, les lacunes doivent pointer les informations manquantes. " +
-              "Retourne UNIQUEMENT via l'appel de fonction fourni.",
+              "Retourne UNIQUEMENT via l'appel de fonction fourni.\n\n" +
+              "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
+              "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le document fourni.\n" +
+              "- Si une information est absente du document source, écris explicitement 'Non mentionné dans le document' ou 'Information non disponible'.\n" +
+              "- Ne fabrique JAMAIS de noms d'outils, de systèmes, d'APIs, ou de technologies qui ne sont pas cités dans le document.\n" +
+              "- Ne génère JAMAIS de chiffres (volumes, coûts, durées, pourcentages) sans les baser sur des données du document. Si tu dois estimer, préfixe TOUJOURS par 'Estimation :' et justifie.\n" +
+              "- Ne crée JAMAIS de règles métier fictives. Cite uniquement celles mentionnées dans le document.\n" +
+              "- Chaque affirmation doit pouvoir être tracée vers un élément du document source.\n" +
+              "- En cas de doute ou d'ambiguïté, signale-le explicitement plutôt que de deviner.\n" +
+              "- N'extrapole pas au-delà de ce qui est raisonnablement déductible des données fournies.\n" +
+              "- Les étapes doivent provenir UNIQUEMENT du texte du document. Si une étape est inférée (non explicitement mentionnée), marque sa source comme 'inféré' et explique pourquoi dans la description.\n" +
+              "- Ne remplis JAMAIS un champ avec des données plausibles mais inventées. Laisse-le vide ou écris 'Non mentionné'.",
           },
           {
             role: "user",

@@ -145,6 +145,16 @@ Après chaque réponse de l'utilisateur, tu fais un bref accusé de réception p
 
 ${shouldGeneratePDD ? "L'utilisateur a répondu à suffisamment de questions. Si sa dernière réponse clôt un sujet, retourne pdd_ready=true. Sinon, pose une dernière question de synthèse." : ""}
 
+RÈGLES ANTI-HALLUCINATION (STRICTES) :
+- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le contexte fourni.
+- Tes questions de challenge doivent TOUJOURS référencer des éléments spécifiques du cas d'usage (étape, variante, outil, règle métier mentionnée).
+- N'invente JAMAIS de scénarios hypothétiques sans rapport avec le contexte fourni.
+- Ne fabrique JAMAIS de noms d'outils, de systèmes, d'APIs, ou de technologies qui ne sont pas cités dans le contexte.
+- Ne présuppose JAMAIS de chiffres (volumes, coûts, durées) non mentionnés. Si tu fais référence à un chiffre, il doit provenir du contexte.
+- Ne crée JAMAIS de règles métier fictives. Cite uniquement celles mentionnées dans le contexte ou la conversation.
+- En cas de doute ou d'ambiguïté, signale-le explicitement plutôt que de deviner.
+- N'extrapole pas au-delà de ce qui est raisonnablement déductible des données fournies.
+
 Contexte du cas d'usage :
 ${contextParts.join("\n")}`;
 

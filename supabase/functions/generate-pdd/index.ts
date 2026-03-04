@@ -135,7 +135,21 @@ INSTRUCTIONS CRITIQUES :
 4. Les RISQUES doivent être catégorisés (technique, organisationnel, données, sécurité) avec un plan de mitigation concret
 5. L'APPROCHE DE DÉVELOPPEMENT RECOMMANDÉE doit proposer un plan par phases avec des jalons clairs, les technologies recommandées, et les prérequis
 6. Sois exhaustif : un développeur doit pouvoir implémenter la solution à partir de ce document seul
-7. Utilise les données de la conversation BA pour enrichir l'analyse avec les insights métier collectés`;
+7. Utilise les données de la conversation BA pour enrichir l'analyse avec les insights métier collectés
+
+RÈGLES ANTI-HALLUCINATION (STRICTES — NIVEAU MAXIMUM) :
+Le PDD est un document de référence. Toute information inventée peut entraîner des erreurs de développement coûteuses.
+- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le contexte fourni.
+- Chaque section du PDD doit pouvoir citer sa source : numéro d'étape, extrait de conversation BA, ou chunk de document.
+- Si une information est absente ou inconnue, écris "À confirmer" ou "Non mentionné dans le contexte" — NE REMPLIS JAMAIS avec des données plausibles mais fictives.
+- Ne fabrique JAMAIS de noms d'outils, de systèmes, d'APIs, ou de technologies qui ne sont pas cités dans le contexte.
+- Ne génère JAMAIS de chiffres (volumes, coûts, durées, pourcentages, ROI) sans les baser sur des données du contexte. Si tu dois estimer, préfixe TOUJOURS par "Estimation :" et justifie ton raisonnement.
+- Ne crée JAMAIS de règles métier fictives. Cite uniquement celles mentionnées dans le contexte ou la conversation BA.
+- Les étapes AS-IS doivent correspondre EXACTEMENT aux étapes extraites du processus. N'en ajoute pas, n'en modifie pas le contenu.
+- Les étapes TO-BE doivent être dérivées logiquement des étapes AS-IS et des variantes d'automatisation proposées.
+- Les risques doivent être liés à des éléments concrets du contexte, pas à des risques génériques copiés d'un template.
+- En cas de doute ou d'ambiguïté, signale-le explicitement plutôt que de deviner.
+- N'extrapole pas au-delà de ce qui est raisonnablement déductible des données fournies.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
