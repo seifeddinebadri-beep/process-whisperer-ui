@@ -46,12 +46,25 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
   const [customAnswer, setCustomAnswer] = useState("");
   const [allDone, setAllDone] = useState(false);
 
-  const fetchQuestions = useCallback(async (history: { question: string; answer: string }[] = []) => {
+  const [totalQuestionsAsked, setTotalQuestionsAsked] = useState(0);
+
+  const fetchQuestions = useCallback(async (history: { question: string; answer: string }[] = [], questionsAskedSoFar: number = 0) => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("agent-clarify", {
-        body: { process_id: processId, conversation_history: history },
+        body: { process_id: processId, conversation_history: history, total_questions_asked: questionsAskedSoFar },
       });
+
+      // Session complete — no more questions
+      if (!error && data?.session_complete) {
+        setConversation((prev) => [
+          ...prev,
+          { type: "agent", message: data.agent_message || (lang === "fr" ? "J'ai suffisamment d'informations. Vous pouvez appliquer les réponses au contexte." : "I have enough information. You can apply answers to the context."), timestamp: new Date() },
+        ]);
+        setAllDone(true);
+        setIsLoading(false);
+        return;
+      }
 
       if (!error && data?.questions?.length > 0) {
         // Add agent intro message
@@ -64,6 +77,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
           ...q, allowOther: true, selectedOption: undefined, customAnswer: undefined,
         }));
 
+        setTotalQuestionsAsked((prev) => prev + questions.length);
         setPendingQuestions(questions.slice(1));
         setCurrentQuestion(questions[0]);
         setConversation((prev) => [
@@ -156,8 +170,8 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
       ]);
     } else {
       setCurrentQuestion(null);
-      // Fetch follow-up questions
-      fetchQuestions(newAnswered);
+      // Fetch follow-up questions with current total
+      fetchQuestions(newAnswered, totalQuestionsAsked);
     }
   };
 
@@ -182,7 +196,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
       ]);
     } else {
       setCurrentQuestion(null);
-      fetchQuestions(answeredQuestions);
+      fetchQuestions(answeredQuestions, totalQuestionsAsked);
     }
   };
 
@@ -224,6 +238,7 @@ export function ClarificationPanel({ open, onOpenChange, processId, onApplyToCon
         setAnsweredQuestions([]);
         setAllDone(false);
         setSkippedCount(0);
+        setTotalQuestionsAsked(0);
       }
       onOpenChange(v);
     }}>

@@ -45,11 +45,29 @@ serve(async (req) => {
         : "Analyzing process to generate clarification questions...",
     });
 
-    // Fetch process data
-    const [stepsRes, contextRes, chunksRes] = await Promise.all([
+    const totalQuestionsAsked = body.total_questions_asked || 0;
+    const MAX_QUESTIONS = 8; // Hard cap across all rounds
+
+    // If we've already asked enough, stop
+    if (totalQuestionsAsked >= MAX_QUESTIONS) {
+      await supabase.from("agent_logs").insert({
+        process_id, agent_name: "clarifier", action: "generate_questions", status: "completed",
+        message: "Session complete — question limit reached.",
+      });
+      return new Response(
+        JSON.stringify({ success: true, questions: [], agent_message: "J'ai suffisamment d'informations pour enrichir le contexte. Merci pour vos réponses !", session_complete: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Fetch process data + KB context in parallel
+    const [stepsRes, contextRes, chunksRes, kbToolsRes, kbActivitiesRes, agentLogsRes] = await Promise.all([
       supabase.from("process_steps").select("*").eq("process_id", process_id).order("step_order"),
       supabase.from("process_context").select("*").eq("process_id", process_id).maybeSingle(),
       supabase.from("document_chunks").select("content, chunk_index").eq("process_id", process_id).order("chunk_index").limit(10),
+      supabase.from("tools").select("name, type, purpose").limit(50),
+      supabase.from("activities").select("name, business_objective, description").limit(50),
+      supabase.from("agent_logs").select("message, metadata").eq("process_id", process_id).eq("agent_name", "clarifier").eq("status", "completed").order("created_at", { ascending: false }).limit(10),
     ]);
 
     // Build context string
@@ -78,7 +96,35 @@ serve(async (req) => {
       }
     }
 
+    // Add KB context
+    const kbTools = kbToolsRes.data || [];
+    if (kbTools.length > 0) {
+      parts.push("\n--- Outils connus (Base de connaissances) ---");
+      for (const t of kbTools) {
+        parts.push(`- ${t.name} (${t.type || "N/A"}): ${t.purpose || ""}`);
+      }
+    }
+
+    const kbActivities = kbActivitiesRes.data || [];
+    if (kbActivities.length > 0) {
+      parts.push("\n--- Activités connues (Base de connaissances) ---");
+      for (const a of kbActivities) {
+        parts.push(`- ${a.name}: ${a.business_objective || a.description || ""}`);
+      }
+    }
+
+    // Add previous agent logs to avoid redundancy
+    const previousLogs = agentLogsRes.data || [];
+    if (previousLogs.length > 0) {
+      parts.push("\n--- Informations déjà collectées (logs) ---");
+      for (const log of previousLogs) {
+        if (log.message) parts.push(`- ${log.message}`);
+      }
+    }
+
     const processContext = parts.join("\n");
+
+    const remainingBudget = MAX_QUESTIONS - totalQuestionsAsked;
 
     // Build conversation context
     let conversationPrompt = "";
@@ -112,7 +158,13 @@ serve(async (req) => {
               "Tu es l'agent Clarifier, expert en analyse de processus métier. " +
               "Ton rôle est de comprendre en détail le processus TEL QU'IL EST AUJOURD'HUI (as-is). " +
               "Tu ne dois JAMAIS poser de questions sur l'automatisation, les outils futurs, ou comment le processus pourrait être amélioré. " +
-              "\n\nTes questions doivent couvrir 4 axes, DANS CET ORDRE DE PRIORITÉ :\n" +
+              "\n\nIMPORTANT — BUDGET DE QUESTIONS :\n" +
+              `Tu disposes d'un budget de ${remainingBudget} questions MAXIMUM pour cette série. ` +
+              "Ne pose une question que si elle a une FINALITÉ CLAIRE et ACTIONNABLE pour l'analyse. " +
+              "NE POSE PAS de question si l'information est déjà disponible dans le contexte, la base de connaissances, ou les logs ci-dessus. " +
+              "Si tu estimes avoir suffisamment d'informations, retourne session_complete=true et un message de clôture. " +
+              "Privilégie la QUALITÉ à la QUANTITÉ : mieux vaut 2 questions percutantes que 6 questions vagues.\n\n" +
+              "Tes questions doivent couvrir 4 axes, DANS CET ORDRE DE PRIORITÉ :\n" +
               "1. CONTEXTE MÉTIER (commence toujours par là) : Valide ta compréhension du contexte business. " +
               "Reformule ce que tu as compris de l'objectif du processus, du périmètre, et des parties prenantes, puis demande confirmation ou correction. " +
               "2. TRAITEMENT HUMAIN : Comment chaque tâche est concrètement réalisée par les humains au quotidien — " +
@@ -121,9 +173,9 @@ serve(async (req) => {
               "4. EXCEPTIONS ET CAS PARTICULIERS : Les cas hors norme, les erreurs fréquentes, les contournements, les cas limites rencontrés par les équipes. " +
               "\n" +
               (isFirstRound
-                ? "Génère 4-6 questions de clarification. Commence OBLIGATOIREMENT par 1-2 questions de validation du contexte métier (axe 1), " +
+                ? `Génère ${Math.min(remainingBudget, 4)} questions de clarification. Commence OBLIGATOIREMENT par 1-2 questions de validation du contexte métier (axe 1), ` +
                   "puis enchaîne avec les autres axes. "
-                : "Génère 2-3 questions de suivi basées sur les réponses précédentes. Adapte l'axe selon ce qui manque encore. ") +
+                : `Génère ${Math.min(remainingBudget, 2)} questions de suivi UNIQUEMENT si des lacunes importantes subsistent. Sinon retourne session_complete=true. `) +
               "Chaque question doit cibler un manque d'information spécifique sur le fonctionnement actuel. " +
               "Pour chaque question, propose 3-4 options de réponse avec des descriptions réalistes. " +
               "Génère aussi un message d'accueil (agent_message) pour le début de la conversation. " +
@@ -152,6 +204,7 @@ serve(async (req) => {
                 type: "object",
                 properties: {
                   agent_message: { type: "string", description: "Message d'introduction de l'agent pour cette série de questions" },
+                  session_complete: { type: "boolean", description: "True si l'agent estime avoir suffisamment d'informations et n'a plus de questions pertinentes" },
                   questions: {
                     type: "array",
                     items: {
@@ -179,7 +232,7 @@ serve(async (req) => {
                     },
                   },
                 },
-                required: ["agent_message", "questions"],
+                required: ["agent_message", "session_complete", "questions"],
                 additionalProperties: false,
               },
             },
@@ -204,23 +257,23 @@ serve(async (req) => {
     
     let questions: any[];
     let agent_message: string;
+    let session_complete = false;
 
     if (toolCall) {
       const parsed = JSON.parse(toolCall.function.arguments);
-      questions = parsed.questions;
+      questions = parsed.questions || [];
       agent_message = parsed.agent_message;
+      session_complete = parsed.session_complete || false;
     } else {
-      // Fallback: try to extract from the message content
       const content = aiData.choices?.[0]?.message?.content || "";
       console.warn("No tool call in AI response, attempting to parse content fallback");
-      
-      // Try to find JSON in the content
       const jsonMatch = content.match(/\{[\s\S]*"questions"[\s\S]*\}/);
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
           questions = parsed.questions || [];
           agent_message = parsed.agent_message || introMessage;
+          session_complete = parsed.session_complete || false;
         } catch {
           questions = [];
           agent_message = introMessage;
@@ -231,15 +284,20 @@ serve(async (req) => {
       }
     }
 
+    // If no questions returned, mark session complete
+    if (questions.length === 0) session_complete = true;
+
     // Log completion
     await supabase.from("agent_logs").insert({
       process_id, agent_name: "clarifier", action: "generate_questions", status: "completed",
-      message: `Generated ${questions?.length || 0} clarification questions.`,
-      metadata: { question_count: questions?.length || 0, round: conversation_history.length > 0 ? "follow_up" : "initial" },
+      message: session_complete
+        ? `Session complete. ${totalQuestionsAsked} questions asked total.`
+        : `Generated ${questions.length} clarification questions.`,
+      metadata: { question_count: questions.length, round: conversation_history.length > 0 ? "follow_up" : "initial", session_complete },
     });
 
     return new Response(
-      JSON.stringify({ success: true, questions, agent_message, intro_message: introMessage }),
+      JSON.stringify({ success: true, questions, agent_message, intro_message: introMessage, session_complete }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
