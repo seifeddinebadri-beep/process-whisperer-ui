@@ -169,17 +169,22 @@ serve(async (req) => {
               "PHASE 1 — CONTEXTE GÉNÉRAL (questions 1-4) :\n" +
               "Valide ta compréhension globale du processus. Reformule l'objectif, le périmètre, les parties prenantes principales. " +
               "Demande confirmation ou correction. Comprends POURQUOI ce processus existe et QUI il sert.\n\n" +
-              "PHASE 2 — TRAITEMENT HUMAIN (questions 5-10) :\n" +
+              "PHASE 2 — FRÉQUENCE ET VOLUMÉTRIE (questions 5-8) :\n" +
+              "Quantifie le processus : combien de fois par jour/semaine/mois cette tâche est-elle exécutée ? " +
+              "Combien de dossiers/transactions/cas sont traités ? Combien de temps prend chaque exécution en moyenne ? " +
+              "Y a-t-il des pics saisonniers ou des périodes de forte charge ? " +
+              "Combien de personnes sont mobilisées ? Quel est le temps total consacré par l'équipe ?\n\n" +
+              "PHASE 3 — TRAITEMENT HUMAIN (questions 9-13) :\n" +
               "Descends dans le détail opérationnel. Comment chaque tâche est concrètement réalisée au quotidien : " +
               "qui fait quoi, dans quel ordre, avec quels outils existants, quelles manipulations manuelles (copier-coller, saisie, vérification visuelle), " +
-              "combien de temps prend chaque étape, quels sont les goulots d'étranglement.\n\n" +
-              "PHASE 3 — RÈGLES MÉTIER (questions 11-15) :\n" +
+              "quels sont les goulots d'étranglement.\n\n" +
+              "PHASE 4 — RÈGLES MÉTIER (questions 14-17) :\n" +
               "Identifie les règles de gestion : critères de décision, seuils, conditions, validations, contrôles qualité. " +
               "Quand une décision est prise, sur quels critères ? Y a-t-il des matrices de décision, des barèmes, des tables de référence ?\n\n" +
-              "PHASE 4 — EXCEPTIONS ET CAS LIMITES (questions 16-20) :\n" +
+              "PHASE 5 — EXCEPTIONS ET CAS LIMITES (questions 18-20) :\n" +
               "Explore les cas hors norme : erreurs fréquentes, contournements, cas limites, situations d'urgence, " +
               "que se passe-t-il quand une donnée manque ou est incorrecte, quels sont les scénarios de fallback.\n\n" +
-              `Tu es actuellement en PHASE ${totalQuestionsAsked < 4 ? "1 (Contexte général)" : totalQuestionsAsked < 10 ? "2 (Traitement humain)" : totalQuestionsAsked < 15 ? "3 (Règles métier)" : "4 (Exceptions)"}.\n\n` +
+              `Tu es actuellement en PHASE ${totalQuestionsAsked < 4 ? "1 (Contexte général)" : totalQuestionsAsked < 8 ? "2 (Fréquence et volumétrie)" : totalQuestionsAsked < 13 ? "3 (Traitement humain)" : totalQuestionsAsked < 17 ? "4 (Règles métier)" : "5 (Exceptions)"}.\n\n` +
               (isFirstRound
                 ? `Génère ${Math.min(remainingBudget, 4)} questions pour cette phase. `
                 : `Génère ${Math.min(remainingBudget, 3)} questions de suivi pour la phase courante. Si la phase est couverte, passe à la suivante. Si tout est couvert, retourne session_complete=true. `) +
