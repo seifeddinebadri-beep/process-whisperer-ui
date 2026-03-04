@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -19,6 +19,9 @@ import type { ProcessStep, ProcessContext } from "@/components/process-analysis/
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
+import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
+import { AgentMessage } from "@/components/agents/AgentMessage";
+import type { AgentLogEntry } from "@/components/agents/AgentActivityLog";
 
 const ProcessAnalysis = () => {
   const { t, lang } = useLang();
@@ -227,31 +230,84 @@ const ProcessAnalysis = () => {
     },
   });
 
-  // Launch Discovery mutation
+  // Launch Discovery with agent modal
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveryModalOpen, setDiscoveryModalOpen] = useState(false);
+  const [discoveryEntries, setDiscoveryEntries] = useState<AgentLogEntry[]>([]);
+
+  const addDiscoveryEntry = (entry: Omit<AgentLogEntry, "id" | "timestamp">) => {
+    setDiscoveryEntries((prev) => [...prev, { ...entry, id: `d-${Date.now()}-${Math.random()}`, timestamp: new Date() }]);
+  };
+
+  const updateLastDiscoveryEntry = (updates: Partial<AgentLogEntry>) => {
+    setDiscoveryEntries((prev) => {
+      const copy = [...prev];
+      if (copy.length > 0) Object.assign(copy[copy.length - 1], updates);
+      return copy;
+    });
+  };
+
   const launchDiscovery = async () => {
     setDiscoveryLoading(true);
+    setDiscoveryEntries([]);
+    setDiscoveryModalOpen(true);
+
+    addDiscoveryEntry({ agent: "discoverer", status: "thinking", message: lang === "fr" ? "Analyse du contexte et des étapes du processus..." : "Analyzing process context and steps..." });
+
+    setTimeout(() => {
+      addDiscoveryEntry({ agent: "discoverer", status: "working", message: lang === "fr" ? "Croisement avec la base de connaissances..." : "Cross-referencing with knowledge base..." });
+    }, 1500);
+
+    setTimeout(() => {
+      addDiscoveryEntry({ agent: "discoverer", status: "working", message: lang === "fr" ? "Génération des scénarios d'automatisation..." : "Generating automation scenarios..." });
+    }, 3000);
+
     try {
       const { data, error } = await supabase.functions.invoke("analyze-process", {
         body: { process_id: selectedProcessId },
       });
       if (error) throw error;
-      toast({
-        title: lang === "fr" ? "Découverte lancée !" : "Discovery launched!",
-        description: lang === "fr"
-          ? `${data?.use_cases_count || 0} cas d'usage générés avec ${data?.variants_count || 0} variantes`
-          : `${data?.use_cases_count || 0} use cases generated with ${data?.variants_count || 0} variants`,
+
+      addDiscoveryEntry({
+        agent: "discoverer", status: "done",
+        message: lang === "fr"
+          ? `Découverte terminée : ${data?.use_cases_count || 0} cas d'usage avec ${data?.variants_count || 0} variantes identifiés.`
+          : `Discovery complete: ${data?.use_cases_count || 0} use cases with ${data?.variants_count || 0} variants identified.`,
       });
+
       queryClient.invalidateQueries({ queryKey: ["analysis-processes"] });
       queryClient.invalidateQueries({ queryKey: ["overview-usecases-count"] });
-      navigate("/automation-discovery");
+
+      setTimeout(() => {
+        setDiscoveryModalOpen(false);
+        navigate("/automation-discovery");
+      }, 2000);
     } catch (e: any) {
       console.error("analyze-process error:", e);
-      toast({ title: "Error", description: e.message || "Discovery failed", variant: "destructive" });
+      addDiscoveryEntry({ agent: "discoverer", status: "error", message: e.message || "Discovery failed" });
     } finally {
       setDiscoveryLoading(false);
     }
   };
+
+  // Fetch analyst summary from agent_logs
+  const { data: analystSummary } = useQuery({
+    queryKey: ["analyst-summary", selectedProcessId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agent_logs")
+        .select("message, metadata, created_at")
+        .eq("process_id", selectedProcessId)
+        .eq("agent_name", "analyst")
+        .eq("status", "completed")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !data) return null;
+      return data;
+    },
+    enabled: !!selectedProcessId,
+  });
 
   // Local UI state
   const [editingStep, setEditingStep] = useState<ProcessStep | null>(null);
@@ -357,6 +413,34 @@ const ProcessAnalysis = () => {
         </Button>
       </div>
 
+      {/* Analyst Agent Summary Card */}
+      {analystSummary && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex gap-3">
+              <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                <Brain className="h-4 w-4 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-blue-600 mb-1">Agent Analyst</p>
+                <p className="text-sm text-foreground">{analystSummary.message}</p>
+                {(analystSummary.metadata as any)?.gaps?.length > 0 && (
+                  <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                    <span>{(analystSummary.metadata as any).gaps.join(" • ")}</span>
+                  </div>
+                )}
+                {(analystSummary.metadata as any)?.confidence && (
+                  <Badge variant="secondary" className="mt-2 text-xs">
+                    {lang === "fr" ? "Confiance" : "Confidence"}: {(analystSummary.metadata as any).confidence}%
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Comparison View or Normal Steps */}
       {showComparison ? (
         <StepComparisonView
@@ -444,7 +528,13 @@ const ProcessAnalysis = () => {
         onApplyToContext={handleClarificationApply}
       />
 
-      {/* Sticky Bottom Bar */}
+      {/* Discovery Agent Modal */}
+      <AgentDiscoveryModal
+        open={discoveryModalOpen}
+        onOpenChange={setDiscoveryModalOpen}
+        entries={discoveryEntries}
+      />
+
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg z-50">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <div>

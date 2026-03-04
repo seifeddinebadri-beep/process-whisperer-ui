@@ -79,6 +79,47 @@ export type Database = {
           },
         ]
       }
+      agent_logs: {
+        Row: {
+          action: string
+          agent_name: string
+          created_at: string
+          id: string
+          message: string | null
+          metadata: Json | null
+          process_id: string | null
+          status: string
+        }
+        Insert: {
+          action: string
+          agent_name: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          process_id?: string | null
+          status?: string
+        }
+        Update: {
+          action?: string
+          agent_name?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          process_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_logs_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_use_cases: {
         Row: {
           complexity: string | null

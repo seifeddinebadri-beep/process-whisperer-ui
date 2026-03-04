@@ -2,15 +2,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Building2, Upload, GitBranch, Lightbulb, Loader2 } from "lucide-react";
+import { Building2, Upload, GitBranch, Lightbulb, Loader2, Brain, Bot, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLang } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { AgentMessage } from "@/components/agents/AgentMessage";
+import type { AgentName } from "@/components/agents/AgentMessage";
 
 const Overview = () => {
   const navigate = useNavigate();
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   const { data: companiesCount = 0 } = useQuery({
     queryKey: ["overview-companies-count"],
@@ -50,6 +52,21 @@ const Overview = () => {
       return count ?? 0;
     },
   });
+
+  // Fetch recent agent activity
+  const { data: agentLogs = [] } = useQuery({
+    queryKey: ["overview-agent-logs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agent_logs")
+        .select("id, agent_name, action, status, message, created_at")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data;
+    },
+  });
+
 
   const totalProcesses = processes.length;
   const statusCounts = {
@@ -162,6 +179,29 @@ const Overview = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Agent Activity */}
+      {agentLogs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Brain className="h-4 w-4 text-primary" />
+              {lang === "fr" ? "Activité des Agents" : "Agent Activity"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 divide-y divide-border/50">
+            {agentLogs.map((log: any) => (
+              <AgentMessage
+                key={log.id}
+                agent={log.agent_name as AgentName}
+                status={log.status === "completed" ? "done" : log.status === "error" ? "error" : "working"}
+                message={log.message || log.action}
+                timestamp={new Date(log.created_at)}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

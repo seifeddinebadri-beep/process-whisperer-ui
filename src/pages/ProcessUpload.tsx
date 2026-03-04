@@ -6,12 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
 import { Upload, FileUp, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { useLang } from "@/lib/i18n";
+import { AgentActivityLog, type AgentLogEntry } from "@/components/agents/AgentActivityLog";
 
 const ProcessUpload = () => {
   const { t } = useLang();
@@ -26,8 +26,7 @@ const ProcessUpload = () => {
   const [selectedActivity, setSelectedActivity] = useState("");
   const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStage, setUploadStage] = useState("");
+  const [agentEntries, setAgentEntries] = useState<AgentLogEntry[]>([]);
 
   // Fetch companies
   const { data: companies = [] } = useQuery({
@@ -106,109 +105,105 @@ const ProcessUpload = () => {
     if (file) handleFileSelect(file);
   };
 
+  const addAgentEntry = (entry: Omit<AgentLogEntry, "id" | "timestamp">) => {
+    setAgentEntries((prev) => [...prev, { ...entry, id: `e-${Date.now()}-${Math.random()}`, timestamp: new Date() }]);
+  };
+
+  const updateLastEntry = (updates: Partial<AgentLogEntry>) => {
+    setAgentEntries((prev) => {
+      const copy = [...prev];
+      if (copy.length > 0) Object.assign(copy[copy.length - 1], updates);
+      return copy;
+    });
+  };
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       if (!selectedFile) throw new Error("No file selected");
 
       setUploading(true);
-      setUploadProgress(10);
-      setUploadStage("Uploading file...");
+      setAgentEntries([]);
 
-      // 1. Upload file to storage
+      addAgentEntry({ agent: "analyst", status: "working", message: "Uploading file to storage..." });
+
+      // 1. Upload file
       const filePath = `${crypto.randomUUID()}/${selectedFile.name}`;
-      const { error: storageError } = await supabase.storage
-        .from("process-files")
-        .upload(filePath, selectedFile);
-
+      const { error: storageError } = await supabase.storage.from("process-files").upload(filePath, selectedFile);
       if (storageError) throw storageError;
-      setUploadProgress(25);
-      setUploadStage("Saving record...");
 
-      // 2. Insert record in uploaded_processes
+      updateLastEntry({ status: "done", message: "File uploaded successfully." });
+      addAgentEntry({ agent: "analyst", status: "working", message: "Creating process record..." });
+
+      // 2. Insert record
       const { data: process, error: insertError } = await supabase
         .from("uploaded_processes")
         .insert({
-          file_name: selectedFile.name,
-          file_path: filePath,
-          company_id: selectedCompany || null,
-          department_id: selectedDept || null,
-          entity_id: selectedEntity || null,
-          activity_id: selectedActivity || null,
-          notes: notes || null,
-          status: "uploaded",
+          file_name: selectedFile.name, file_path: filePath,
+          company_id: selectedCompany || null, department_id: selectedDept || null,
+          entity_id: selectedEntity || null, activity_id: selectedActivity || null,
+          notes: notes || null, status: "uploaded",
         })
-        .select("id")
-        .single();
-
+        .select("id").single();
       if (insertError) throw insertError;
-      setUploadProgress(40);
-      setUploadStage("Parsing document...");
 
-      // 3. Call parse-document edge function
-      const { error: parseError } = await supabase.functions.invoke("parse-document", {
-        body: { process_id: process.id },
-      });
+      updateLastEntry({ status: "done", message: "Process record created." });
+      addAgentEntry({ agent: "analyst", status: "working", message: "Parsing document into chunks..." });
 
+      // 3. Parse document
+      const { error: parseError } = await supabase.functions.invoke("parse-document", { body: { process_id: process.id } });
       if (parseError) {
-        console.error("parse-document error:", parseError);
-        toast({ title: "Parsing warning", description: "File uploaded but parsing encountered an issue.", variant: "destructive" });
+        addAgentEntry({ agent: "analyst", status: "error", message: "Parsing encountered an issue." });
+      } else {
+        updateLastEntry({ status: "done", message: "Document parsed into chunks." });
       }
 
-      setUploadProgress(60);
-      setUploadStage("Generating embeddings...");
+      addAgentEntry({ agent: "analyst", status: "working", message: "Generating vector embeddings..." });
 
-      // 4. Trigger embeddings generation
+      // 4. Embeddings
       try {
-        await supabase.functions.invoke("generate-embeddings", {
-          body: { process_id: process.id },
-        });
+        await supabase.functions.invoke("generate-embeddings", { body: { process_id: process.id } });
+        updateLastEntry({ status: "done", message: "Embeddings generated." });
       } catch (e) {
-        console.error("generate-embeddings error:", e);
+        updateLastEntry({ status: "error", message: "Embedding generation failed." });
       }
 
-      setUploadProgress(80);
-      setUploadStage("Extracting process steps (AI)...");
+      addAgentEntry({ agent: "analyst", status: "thinking", message: "Agent Analyst is reasoning about the process..." });
 
-      // 5. Extract structured steps via LLM
+      // 5. Agent Analyze As-Is (replaces extract-steps)
       try {
-        const { data: extractData, error: extractError } = await supabase.functions.invoke("extract-steps", {
+        const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke("agent-analyze-as-is", {
           body: { process_id: process.id },
         });
-        if (extractError) {
-          console.error("extract-steps error:", extractError);
-          toast({ title: "Step extraction warning", description: "Steps could not be auto-extracted. You can add them manually.", variant: "destructive" });
+        if (analyzeError) {
+          updateLastEntry({ status: "error", message: "Agent Analyst encountered an error." });
         } else {
-          console.log("extract-steps result:", extractData);
+          updateLastEntry({
+            status: "done",
+            message: analyzeData?.agent_summary || `Extracted ${analyzeData?.steps_count || 0} steps.`,
+            detail: analyzeData?.gaps_identified?.length
+              ? `Gaps identified: ${analyzeData.gaps_identified.join("; ")}`
+              : undefined,
+          });
         }
       } catch (e) {
-        console.error("extract-steps error:", e);
+        updateLastEntry({ status: "error", message: "Agent Analyst failed." });
       }
 
-      setUploadProgress(100);
-      setUploadStage("Complete!");
+      addAgentEntry({ agent: "analyst", status: "done", message: "Analysis complete — process ready for review." });
       return process;
     },
     onSuccess: () => {
       toast({ title: t.upload.contextAssigned, description: t.upload.readyForAnalysis });
       queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
       queryClient.invalidateQueries({ queryKey: ["overview-processes"] });
-      // Reset form
-      setSelectedFile(null);
-      setSelectedCompany("");
-      setSelectedDept("");
-      setSelectedEntity("");
-      setSelectedActivity("");
-      setNotes("");
-      setUploading(false);
-      setUploadProgress(0);
-      setUploadStage("");
+      setSelectedFile(null); setSelectedCompany(""); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity("");
+      setNotes(""); setUploading(false);
     },
     onError: (error) => {
       console.error("Upload error:", error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
+      addAgentEntry({ agent: "analyst", status: "error", message: error.message });
       setUploading(false);
-      setUploadProgress(0);
-      setUploadStage("");
     },
   });
 
@@ -297,11 +292,12 @@ const ProcessUpload = () => {
               <Textarea placeholder={t.upload.notesPlaceholder} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
 
-            {uploading && (
-              <div className="space-y-1">
-                <Progress value={uploadProgress} className="h-2" />
-                <p className="text-xs text-muted-foreground">{uploadStage}</p>
-              </div>
+            {agentEntries.length > 0 && (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="pt-4 pb-2">
+                  <AgentActivityLog entries={agentEntries} />
+                </CardContent>
+              </Card>
             )}
 
             <Button onClick={() => submitMutation.mutate()} disabled={uploading}>
