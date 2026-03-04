@@ -21,6 +21,7 @@ import {
 import { mockUseCaseDetails, TraceabilityLink, mockVariants, type MockVariant } from "@/data/useCaseDetailData";
 import { mockUseCases as mockDiscoveryData } from "@/data/mockAutomationDiscoveryData";
 import VariantRadarChart from "@/components/process-analysis/VariantRadarChart";
+import BusinessAnalystPanel from "@/components/agents/BusinessAnalystPanel";
 import { useLang } from "@/lib/i18n";
 import { toast } from "sonner";
 
@@ -800,6 +801,9 @@ const UseCaseDetail = () => {
             </Card>
           </>
         )}
+
+        {/* ===== BUSINESS ANALYST AGENT ===== */}
+        <BusinessAnalystPanel useCaseId={id || ""} useCaseTitle={useCase.title} />
 
         {/* If no enriched detail and no variants, show a simple summary card */}
         {!detail && variants.length === 0 && (
