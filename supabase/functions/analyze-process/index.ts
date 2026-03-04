@@ -259,7 +259,16 @@ async function generateUseCaseDetail(
             "métriques de valeur (business value, complexité, risque, impact changement), " +
             "et liens de traçabilité vers les étapes, rôles, outils et règles métier du processus. " +
             "Génère du contenu réaliste, spécifique et professionnel basé sur le contexte du processus. " +
-            "Retourne tes résultats UNIQUEMENT via l'appel de fonction fourni.",
+            "Retourne tes résultats UNIQUEMENT via l'appel de fonction fourni.\n\n" +
+            "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
+            "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le contexte fourni.\n" +
+            "- Les signaux de détection doivent référencer des étapes RÉELLES du processus.\n" +
+            "- Les outils suggérés doivent provenir du document OU être explicitement marqués comme 'Suggestion externe'.\n" +
+            "- Ne génère JAMAIS de chiffres sans les baser sur des données fournies. Si tu estimes, préfixe par 'Estimation :' et justifie.\n" +
+            "- Ne crée JAMAIS de règles métier fictives. Cite uniquement celles du contexte.\n" +
+            "- Chaque affirmation doit pouvoir être tracée vers un élément du contexte source.\n" +
+            "- En cas de doute, signale-le explicitement plutôt que de deviner.\n" +
+            "- N'extrapole pas au-delà de ce qui est raisonnablement déductible des données fournies.",
         },
         {
           role: "user",
@@ -349,7 +358,16 @@ serve(async (req) => {
               "Pour chaque cas d'usage, génère 2 à 3 variantes d'approche d'automatisation différentes. " +
               "Par exemple : Variante 1 = RPA simple, Variante 2 = IA + OCR, Variante 3 = Intégration complète. " +
               "Marque une seule variante comme recommandée par cas d'usage. " +
-              "Retourne tes résultats UNIQUEMENT via l'appel de fonction fourni.",
+              "Retourne tes résultats UNIQUEMENT via l'appel de fonction fourni.\n\n" +
+              "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
+              "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le contexte du processus fourni.\n" +
+              "- Les cas d'usage doivent être fondés sur les étapes RÉELLES du processus. Ne crée pas de cas d'usage sans lien avec les étapes fournies.\n" +
+              "- Les outils suggérés doivent provenir du document OU être explicitement marqués comme 'Suggestion externe (non mentionné dans le document)'.\n" +
+              "- Ne génère JAMAIS de chiffres de ROI, coûts ou délais sans les baser sur des données du contexte. Si tu estimes, préfixe TOUJOURS par 'Estimation :' et justifie ton raisonnement.\n" +
+              "- Ne fabrique JAMAIS de règles métier fictives. Cite uniquement celles mentionnées dans le processus.\n" +
+              "- Chaque affirmation doit pouvoir être tracée vers une étape ou un élément du contexte source.\n" +
+              "- En cas de doute ou d'ambiguïté, signale-le explicitement plutôt que de deviner.\n" +
+              "- N'extrapole pas au-delà de ce qui est raisonnablement déductible des données fournies.",
           },
           {
             role: "user",

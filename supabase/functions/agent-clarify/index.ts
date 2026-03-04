@@ -127,7 +127,15 @@ serve(async (req) => {
               "Chaque question doit cibler un manque d'information spécifique sur le fonctionnement actuel. " +
               "Pour chaque question, propose 3-4 options de réponse avec des descriptions réalistes. " +
               "Génère aussi un message d'accueil (agent_message) pour le début de la conversation. " +
-              "Retourne UNIQUEMENT via l'appel de fonction.",
+              "Retourne UNIQUEMENT via l'appel de fonction.\n\n" +
+              "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
+              "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le contexte fourni.\n" +
+              "- Tes questions doivent cibler des lacunes RÉELLEMENT VISIBLES dans les données fournies. Ne pose pas de questions sur des sujets déjà bien couverts dans le contexte.\n" +
+              "- Ne fabrique JAMAIS de noms d'outils, de systèmes ou de technologies dans les options de réponse qui ne sont pas cités dans le contexte.\n" +
+              "- Ne présuppose JAMAIS de règles métier, volumes ou fréquences non mentionnés dans le contexte.\n" +
+              "- Les options de réponse doivent être génériques et réalistes, pas des affirmations déguisées contenant des données inventées.\n" +
+              "- En cas de doute sur une information, formule une question pour la clarifier plutôt que de la deviner.\n" +
+              "- N'extrapole pas au-delà de ce qui est raisonnablement déductible des données fournies.",
           },
           {
             role: "user",
