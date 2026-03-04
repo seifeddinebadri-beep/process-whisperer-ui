@@ -18,7 +18,7 @@ import { ClarificationPanel } from "@/components/process-analysis/ClarificationP
 import type { ProcessStep, ProcessContext } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
-import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
+// Mock data removed — only real DB data is used
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
 import { AgentMessage } from "@/components/agents/AgentMessage";
@@ -107,9 +107,9 @@ const ProcessAnalysis = () => {
     enabled: !!selectedProcessId,
   });
 
-  // Use mock data as fallback when DB steps are empty
-  const displaySteps = steps.length > 0 ? steps : mockProcessSteps;
-  const displayContext = context || mockProcessContext;
+  // Always use real DB data
+  const displaySteps = steps;
+  const displayContext = context || null;
 
   // Derive roles and tools from display steps
   const roles = useMemo(() => [...new Set(displaySteps.map((s) => s.role).filter(Boolean))], [displaySteps]);
