@@ -674,6 +674,35 @@ export type Database = {
           },
         ]
       }
+      use_case_details: {
+        Row: {
+          created_at: string
+          detail_content: Json
+          id: string
+          use_case_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail_content?: Json
+          id?: string
+          use_case_id: string
+        }
+        Update: {
+          created_at?: string
+          detail_content?: Json
+          id?: string
+          use_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "use_case_details_use_case_id_fkey"
+            columns: ["use_case_id"]
+            isOneToOne: true
+            referencedRelation: "automation_use_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

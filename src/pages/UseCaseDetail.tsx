@@ -122,8 +122,29 @@ const UseCaseDetail = () => {
     : (Object.keys(mockVariants).length > 0) ? mockVariants["uc1"] || Object.values(mockVariants)[0]
     : [];
 
-  // Fallback detail to uc1 if no match
-  const detail = id ? (mockUseCaseDetails[id] || mockUseCaseDetails["uc1"]) : mockUseCaseDetails["uc1"];
+  // Load detail content from DB
+  const { data: dbDetail } = useQuery({
+    queryKey: ["use-case-detail-content", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await supabase
+        .from("use_case_details")
+        .select("detail_content")
+        .eq("use_case_id", id)
+        .single();
+      if (error) return null;
+      return data?.detail_content as any;
+    },
+    enabled: !!id,
+  });
+
+  // Use DB detail when available, fall back to mock for legacy mock IDs (uc1-uc7)
+  const mockIds = ["uc1", "uc2", "uc3", "uc4", "uc5", "uc6", "uc7"];
+  const detail = dbDetail
+    ? { ...dbDetail, useCaseId: id }
+    : (id && mockIds.includes(id))
+      ? mockUseCaseDetails[id]
+      : mockUseCaseDetails["uc1"];
 
   const handleDownloadPdf = async () => {
     if (!useCase) return;
