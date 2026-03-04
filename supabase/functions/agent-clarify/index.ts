@@ -183,9 +183,35 @@ serve(async (req) => {
 
     const aiData = await aiResponse.json();
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("No tool call in AI response");
+    
+    let questions: any[];
+    let agent_message: string;
 
-    const { questions, agent_message } = JSON.parse(toolCall.function.arguments);
+    if (toolCall) {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      questions = parsed.questions;
+      agent_message = parsed.agent_message;
+    } else {
+      // Fallback: try to extract from the message content
+      const content = aiData.choices?.[0]?.message?.content || "";
+      console.warn("No tool call in AI response, attempting to parse content fallback");
+      
+      // Try to find JSON in the content
+      const jsonMatch = content.match(/\{[\s\S]*"questions"[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          questions = parsed.questions || [];
+          agent_message = parsed.agent_message || introMessage;
+        } catch {
+          questions = [];
+          agent_message = introMessage;
+        }
+      } else {
+        questions = [];
+        agent_message = introMessage;
+      }
+    }
 
     // Log completion
     await supabase.from("agent_logs").insert({
