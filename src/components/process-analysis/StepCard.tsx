@@ -38,9 +38,9 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
             <div className="font-medium text-sm">{step.name}</div>
             <div className="text-xs text-muted-foreground">{step.description}</div>
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {step.source && step.source !== "manual" && (
-                <Badge className={`text-[10px] border-0 ${sourceConfig[step.source].className}`}>
-                  {sourceConfig[step.source].label}
+              {step.source && step.source !== "manual" && sourceConfig[step.source as StepSource] && (
+                <Badge className={`text-[10px] border-0 ${sourceConfig[step.source as StepSource].className}`}>
+                  {sourceConfig[step.source as StepSource].label}
                 </Badge>
               )}
               {step.role && <Badge variant="secondary" className="text-[10px]">{step.role}</Badge>}
