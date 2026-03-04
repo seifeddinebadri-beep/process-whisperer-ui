@@ -455,14 +455,28 @@ serve(async (req) => {
     const { use_cases } = JSON.parse(toolCall.function.arguments);
     if (!Array.isArray(use_cases) || use_cases.length === 0) throw new Error("No use cases generated");
 
-    // Delete existing use cases & variants for this process (re-analysis)
+    // Delete existing use cases & all dependent data for this process (re-analysis)
     const { data: existingUCs } = await supabase.from("automation_use_cases").select("id").eq("process_id", process_id);
     if (existingUCs && existingUCs.length > 0) {
       const ucIds = existingUCs.map((uc: any) => uc.id);
+
+      // Get conversation IDs for these use cases
+      const { data: existingConvs } = await supabase.from("ba_conversations").select("id").in("use_case_id", ucIds);
+      if (existingConvs && existingConvs.length > 0) {
+        const convIds = existingConvs.map((c: any) => c.id);
+        await supabase.from("ba_messages").delete().in("conversation_id", convIds);
+        await supabase.from("ba_conversations").delete().in("use_case_id", ucIds);
+      }
+
+      // Delete PDD documents, use case details, and variants
+      await supabase.from("pdd_documents").delete().in("use_case_id", ucIds);
       await supabase.from("use_case_details").delete().in("use_case_id", ucIds);
       await supabase.from("automation_variants").delete().in("use_case_id", ucIds);
     }
-    await supabase.from("automation_use_cases").delete().eq("process_id", process_id);
+    const { error: deleteError } = await supabase.from("automation_use_cases").delete().eq("process_id", process_id);
+    if (deleteError) {
+      console.error("Failed to delete old use cases:", deleteError);
+    }
 
     // Insert use cases and their variants
     let totalVariants = 0;
