@@ -186,8 +186,8 @@ serve(async (req) => {
               "que se passe-t-il quand une donnée manque ou est incorrecte, quels sont les scénarios de fallback.\n\n" +
               `Tu es actuellement en PHASE ${totalQuestionsAsked < 4 ? "1 (Contexte général)" : totalQuestionsAsked < 8 ? "2 (Fréquence et volumétrie)" : totalQuestionsAsked < 13 ? "3 (Traitement humain)" : totalQuestionsAsked < 17 ? "4 (Règles métier)" : "5 (Exceptions)"}.\n\n` +
               (isFirstRound
-                ? `Génère ${Math.min(remainingBudget, 4)} questions pour cette phase. `
-                : `Génère ${Math.min(remainingBudget, 3)} questions de suivi pour la phase courante. Si la phase est couverte, passe à la suivante. Si tout est couvert, retourne session_complete=true. `) +
+                ? `Génère exactement ${Math.min(remainingBudget, 5)} questions pour cette phase. `
+                : `Génère exactement ${Math.min(remainingBudget, 5)} questions de suivi pour la phase courante. Si la phase est couverte, passe à la suivante. Si tout est couvert, retourne session_complete=true. `) +
               "Chaque question doit cibler un manque d'information spécifique sur le fonctionnement actuel. " +
               "Pour chaque question, propose 3-4 options de réponse avec des descriptions réalistes. " +
               "Génère aussi un message d'accueil (agent_message) pour le début de la conversation. " +
