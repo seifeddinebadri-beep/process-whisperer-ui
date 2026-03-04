@@ -151,40 +151,50 @@ serve(async (req) => {
         .eq("process_id", process_id);
 
       for (const uc of (useCases || [])) {
-        await log(supabase, process_id, "phase_ba", "started",
-          `BA: Challenging use case "${uc.title}"...`
-        );
-
-        // Start conversation
-        let baResult = await callFunction("agent-business-analyst", { use_case_id: uc.id });
-        const convId = baResult.conversation_id;
-        let rounds = 0;
-        const maxRounds = 4;
-
-        // Auto-answer BA questions
-        while (!baResult.pdd_ready && rounds < maxRounds && baResult.question) {
-          const firstOption = baResult.question.options?.[0];
-          const answer = firstOption
-            ? firstOption.label + (firstOption.description ? ` — ${firstOption.description}` : "")
-            : "Oui, c'est correct.";
-
-          baResult = await callFunction("agent-business-analyst", {
-            use_case_id: uc.id,
-            conversation_id: convId,
-            user_message: answer,
-          });
-          rounds++;
-        }
-
-        // Generate PDD
         try {
-          await callFunction("generate-pdd", {
-            use_case_id: uc.id,
-            conversation_id: convId,
-          });
-          pddsGenerated++;
-        } catch (pddErr) {
-          console.error(`PDD generation failed for ${uc.title}:`, pddErr);
+          await log(supabase, process_id, "phase_ba", "started",
+            `BA: Challenging use case "${uc.title}"...`
+          );
+
+          // Start conversation
+          let baResult = await callFunction("agent-business-analyst", { use_case_id: uc.id });
+          const convId = baResult.conversation_id;
+          let rounds = 0;
+          const maxRounds = 4;
+
+          // Auto-answer BA questions
+          while (!baResult.pdd_ready && rounds < maxRounds && baResult.question) {
+            const firstOption = baResult.question.options?.[0];
+            const answer = firstOption
+              ? firstOption.label + (firstOption.description ? ` — ${firstOption.description}` : "")
+              : "Oui, c'est correct.";
+
+            baResult = await callFunction("agent-business-analyst", {
+              use_case_id: uc.id,
+              conversation_id: convId,
+              user_message: answer,
+            });
+            rounds++;
+          }
+
+          // Generate PDD
+          try {
+            await callFunction("generate-pdd", {
+              use_case_id: uc.id,
+              conversation_id: convId,
+            });
+            pddsGenerated++;
+          } catch (pddErr) {
+            console.error(`PDD generation failed for ${uc.title}:`, pddErr);
+            await log(supabase, process_id, "phase_ba", "warning",
+              `PDD generation failed for "${uc.title}": ${(pddErr as Error).message}`
+            );
+          }
+        } catch (ucErr) {
+          console.error(`BA failed for ${uc.title}:`, ucErr);
+          await log(supabase, process_id, "phase_ba", "warning",
+            `BA challenge failed for "${uc.title}": ${(ucErr as Error).message}. Skipping.`
+          );
         }
       }
 
