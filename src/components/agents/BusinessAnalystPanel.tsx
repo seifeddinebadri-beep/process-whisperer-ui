@@ -137,6 +137,31 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
     }
   };
 
+  const skipQuestion = async () => {
+    if (!conversationId || !currentQuestion) return;
+
+    setConversation((prev) => [...prev, { type: "user", message: "(Question passée)", timestamp: new Date() }]);
+    setCurrentQuestion(null);
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("agent-business-analyst", {
+        body: {
+          use_case_id: useCaseId,
+          conversation_id: conversationId,
+          user_message: "Je passe cette question, pose la suivante.",
+        },
+      });
+      if (error) throw error;
+      handleResponse(data);
+    } catch (e: any) {
+      toast.error("Erreur de communication avec l'agent BA");
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const generatePDD = async () => {
     if (!conversationId) return;
     setPddGenerating(true);
@@ -359,10 +384,15 @@ const BusinessAnalystPanel = ({ open, onOpenChange, useCaseId, useCaseTitle }: B
               )}
             </div>
 
-            <Button size="sm" onClick={submitAnswer} disabled={!canAnswer} className="w-full">
-              <MessageSquare className="h-4 w-4 mr-1" />
-              Répondre
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={skipQuestion} className="flex-shrink-0">
+                Passer
+              </Button>
+              <Button size="sm" onClick={submitAnswer} disabled={!canAnswer} className="flex-1">
+                <MessageSquare className="h-4 w-4 mr-1" />
+                Répondre
+              </Button>
+            </div>
           </div>
         )}
 
