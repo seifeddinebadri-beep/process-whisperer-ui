@@ -16,7 +16,7 @@ import {
   ArrowLeft, AlertTriangle, CheckCircle2, XCircle, Info,
   Repeat, Binary, Zap, FileInput, ArrowRightLeft,
   User, Wrench, BookOpen, ShieldAlert, LinkIcon,
-  MessageSquare, Loader2, Star, Download, ThumbsUp, ThumbsDown,
+  MessageSquare, Loader2, Star, Download, ThumbsUp, ThumbsDown, Bot, Sparkles,
 } from "lucide-react";
 import { mockUseCaseDetails, TraceabilityLink, mockVariants, type MockVariant } from "@/data/useCaseDetailData";
 import { mockUseCases as mockDiscoveryData } from "@/data/mockAutomationDiscoveryData";
@@ -61,6 +61,7 @@ const UseCaseDetail = () => {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [showBAPanel, setShowBAPanel] = useState(false);
 
   // Load use case from DB
   const { data: dbUseCase, isLoading } = useQuery({
@@ -803,7 +804,25 @@ const UseCaseDetail = () => {
         )}
 
         {/* ===== BUSINESS ANALYST AGENT ===== */}
-        <BusinessAnalystPanel useCaseId={id || ""} useCaseTitle={useCase.title} />
+        <Card className="border-2 border-dashed border-amber-200 dark:border-amber-900/40">
+          <CardContent className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+            <div className="h-14 w-14 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <Bot className="h-7 w-7 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold">Agent Business Analyst</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                Challenge l'approche d'automatisation : règles métier, intégrations, risques, périmètre.
+                Génère un PDD (Process Design Document) à la fin.
+              </p>
+            </div>
+            <Button onClick={() => setShowBAPanel(true)} variant="outline" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Démarrer la session de challenge
+            </Button>
+          </CardContent>
+        </Card>
+        <BusinessAnalystPanel open={showBAPanel} onOpenChange={setShowBAPanel} useCaseId={id || ""} useCaseTitle={useCase.title} />
 
         {/* If no enriched detail and no variants, show a simple summary card */}
         {!detail && variants.length === 0 && (
