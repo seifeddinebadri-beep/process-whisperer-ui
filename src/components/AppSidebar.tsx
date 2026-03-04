@@ -70,7 +70,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {navItems.map((item) => {
                 const showDot =
-                  (item.url === "/process-analysis" && hasActiveAgent(["analyst", "clarifier"])) ||
+                  (item.url === "/process-analysis" && hasActiveAgent(["analyst", "clarifier", "orchestrator"])) ||
                   (item.url === "/automation-discovery" && hasActiveAgent(["discoverer"]));
 
                 return (

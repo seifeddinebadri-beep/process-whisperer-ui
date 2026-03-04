@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -20,6 +20,7 @@ import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
+import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
 import { AgentMessage } from "@/components/agents/AgentMessage";
 import type { AgentLogEntry } from "@/components/agents/AgentActivityLog";
 
@@ -314,6 +315,22 @@ const ProcessAnalysis = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [clarificationOpen, setClarificationOpen] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [orchestratorOpen, setOrchestratorOpen] = useState(false);
+  const [orchestratorLoading, setOrchestratorLoading] = useState(false);
+
+  const launchOrchestrator = async () => {
+    setOrchestratorLoading(true);
+    setOrchestratorOpen(true);
+    try {
+      await supabase.functions.invoke("agent-orchestrator", {
+        body: { process_id: selectedProcessId },
+      });
+    } catch (e: any) {
+      console.error("Orchestrator error:", e);
+    } finally {
+      setOrchestratorLoading(false);
+    }
+  };
 
   const handleClarificationApply = (updates: Partial<ProcessContext>) => {
     const merged: ProcessContext = {
@@ -535,6 +552,18 @@ const ProcessAnalysis = () => {
         entries={discoveryEntries}
       />
 
+      {/* Orchestrator Modal */}
+      <AgentOrchestratorModal
+        open={orchestratorOpen}
+        onOpenChange={setOrchestratorOpen}
+        processId={selectedProcessId}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["analysis-processes"] });
+          queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+          queryClient.invalidateQueries({ queryKey: ["process-context", selectedProcessId] });
+        }}
+      />
+
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg z-50">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <div>
@@ -542,6 +571,18 @@ const ProcessAnalysis = () => {
             <p className="text-xs text-muted-foreground">{t.analysis.approveSubtitle}</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              onClick={launchOrchestrator}
+              disabled={orchestratorLoading || displaySteps.length === 0}
+              variant="outline"
+            >
+              {orchestratorLoading ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 mr-1" />
+              )}
+              {lang === "fr" ? "Analyse complète" : "Full Analysis"}
+            </Button>
             {approved && (
               <Button
                 onClick={launchDiscovery}
