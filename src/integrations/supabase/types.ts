@@ -420,6 +420,33 @@ export type Database = {
           },
         ]
       }
+      kb_documents: {
+        Row: {
+          entity_id: string
+          entity_type: string
+          file_name: string
+          file_path: string
+          id: string
+          uploaded_at: string
+        }
+        Insert: {
+          entity_id: string
+          entity_type: string
+          file_name: string
+          file_path: string
+          id?: string
+          uploaded_at?: string
+        }
+        Update: {
+          entity_id?: string
+          entity_type?: string
+          file_name?: string
+          file_path?: string
+          id?: string
+          uploaded_at?: string
+        }
+        Relationships: []
+      }
       pdd_documents: {
         Row: {
           content: Json
@@ -567,6 +594,41 @@ export type Database = {
             columns: ["process_id"]
             isOneToOne: false
             referencedRelation: "uploaded_processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      services: {
+        Row: {
+          activity_id: string
+          business_objective: string | null
+          description: string | null
+          documentation: string[] | null
+          id: string
+          name: string
+        }
+        Insert: {
+          activity_id: string
+          business_objective?: string | null
+          description?: string | null
+          documentation?: string[] | null
+          id?: string
+          name: string
+        }
+        Update: {
+          activity_id?: string
+          business_objective?: string | null
+          description?: string | null
+          documentation?: string[] | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           },
         ]
