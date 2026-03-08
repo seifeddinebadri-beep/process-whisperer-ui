@@ -10,6 +10,7 @@ import KnowledgeBase from "./pages/KnowledgeBase";
 import ProcessUpload from "./pages/ProcessUpload";
 import ProcessAnalysis from "./pages/ProcessAnalysis";
 import AutomationDiscovery from "./pages/AutomationDiscovery";
+import AutomationBacklogReport from "./pages/AutomationBacklogReport";
 import UseCaseDetail from "./pages/UseCaseDetail";
 import NotFound from "./pages/NotFound";
 
