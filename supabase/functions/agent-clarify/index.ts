@@ -46,9 +46,8 @@ serve(async (req) => {
     });
 
     const totalQuestionsAsked = body.total_questions_asked || 0;
-    const MAX_QUESTIONS = 20; // Hard cap across all rounds
+    const MAX_QUESTIONS = 20;
 
-    // If we've already asked enough, stop
     if (totalQuestionsAsked >= MAX_QUESTIONS) {
       await supabase.from("agent_logs").insert({
         process_id, agent_name: "clarifier", action: "generate_questions", status: "completed",
@@ -60,15 +59,27 @@ serve(async (req) => {
       );
     }
 
-    // Fetch process data + KB context in parallel
-    const [stepsRes, contextRes, chunksRes, kbToolsRes, kbActivitiesRes, agentLogsRes] = await Promise.all([
+    // Fetch process data + KB context + actions + screenshots in parallel
+    const [stepsRes, contextRes, chunksRes, kbToolsRes, kbActivitiesRes, agentLogsRes, actionsRes, screenshotsRes] = await Promise.all([
       supabase.from("process_steps").select("*").eq("process_id", process_id).order("step_order"),
       supabase.from("process_context").select("*").eq("process_id", process_id).maybeSingle(),
       supabase.from("document_chunks").select("content, chunk_index").eq("process_id", process_id).order("chunk_index").limit(10),
       supabase.from("tools").select("name, type, purpose").limit(50),
       supabase.from("activities").select("name, business_objective, description").limit(50),
       supabase.from("agent_logs").select("message, metadata").eq("process_id", process_id).eq("agent_name", "clarifier").eq("status", "completed").order("created_at", { ascending: false }).limit(10),
+      supabase.from("step_actions").select("*").order("action_order"),
+      supabase.from("process_screenshots").select("*").eq("process_id", process_id).order("page_number"),
     ]);
+
+    // Build step_id -> actions map
+    const steps = stepsRes.data || [];
+    const stepIds = steps.map((s: any) => s.id);
+    const allActions = (actionsRes.data || []).filter((a: any) => stepIds.includes(a.step_id));
+    const actionsByStep: Record<string, any[]> = {};
+    for (const a of allActions) {
+      if (!actionsByStep[a.step_id]) actionsByStep[a.step_id] = [];
+      actionsByStep[a.step_id].push(a);
+    }
 
     // Build context string
     const parts: string[] = [];
@@ -80,11 +91,14 @@ serve(async (req) => {
       parts.push(`Volume: ${ctx.volume_and_frequency || "N/A"}`);
     }
 
-    const steps = stepsRes.data || [];
     if (steps.length > 0) {
       parts.push("\n--- Étapes ---");
       for (const s of steps) {
-        parts.push(`${s.step_order}. ${s.name}: ${s.description || ""} (Outil: ${s.tool_used || "N/A"}, Rôle: ${s.role || "N/A"})`);
+        parts.push(`${s.step_order}. ${s.name}: ${s.description || ""} (Outil: ${s.tool_used || "N/A"}, Rôle: ${s.role || "N/A"}${s.screenshot_url ? ", 📸 Screenshot disponible" : ""})`);
+        const stepActions = actionsByStep[s.id] || [];
+        for (const a of stepActions) {
+          parts.push(`  → Action ${a.action_order}: ${a.description} [Système: ${a.system_used || "N/A"}${a.screenshot_url ? ", 📸 Screenshot" : ""}]`);
+        }
       }
     }
 
@@ -96,7 +110,16 @@ serve(async (req) => {
       }
     }
 
-    // Add KB context
+    // Screenshots
+    const screenshots = screenshotsRes.data || [];
+    if (screenshots.length > 0) {
+      parts.push("\n--- Captures d'écran du processus ---");
+      for (const sc of screenshots) {
+        parts.push(`- Page ${sc.page_number || "?"}: ${sc.caption || "Sans légende"} (${sc.file_path})`);
+      }
+    }
+
+    // KB context
     const kbTools = kbToolsRes.data || [];
     if (kbTools.length > 0) {
       parts.push("\n--- Outils connus (Base de connaissances) ---");
@@ -113,7 +136,7 @@ serve(async (req) => {
       }
     }
 
-    // Add previous agent logs to avoid redundancy
+    // Previous agent logs
     const previousLogs = agentLogsRes.data || [];
     if (previousLogs.length > 0) {
       parts.push("\n--- Informations déjà collectées (logs) ---");
@@ -123,7 +146,6 @@ serve(async (req) => {
     }
 
     const processContext = parts.join("\n");
-
     const remainingBudget = MAX_QUESTIONS - totalQuestionsAsked;
 
     // Build conversation context
@@ -136,7 +158,6 @@ serve(async (req) => {
       conversationPrompt += "\nGénère des questions de suivi basées sur ces réponses. Ne répète pas les questions déjà posées.";
     }
 
-    // Build agent intro message
     const isFirstRound = conversation_history.length === 0;
     const introMessage = isFirstRound
       ? "Je suis l'agent Clarifier. J'ai analysé votre processus et j'ai quelques questions pour améliorer l'analyse d'automatisation."
@@ -158,7 +179,9 @@ serve(async (req) => {
               "Tu es l'agent Clarifier, expert en analyse de processus métier. " +
               "Ton rôle est de comprendre en détail le processus TEL QU'IL EST AUJOURD'HUI (as-is). " +
               "Tu ne dois JAMAIS poser de questions sur l'automatisation, les outils futurs, ou comment le processus pourrait être amélioré. " +
-              "\n\nIMPORTANT — BUDGET DE QUESTIONS :\n" +
+              "\n\nIMPORTANT — Tu as accès aux ACTIONS GRANULAIRES de chaque étape (sous-étapes détaillées avec système utilisé) et aux CAPTURES D'ÉCRAN associées. " +
+              "Utilise ces informations pour poser des questions plus précises et éviter de redemander ce qui est déjà documenté.\n\n" +
+              "IMPORTANT — BUDGET DE QUESTIONS :\n" +
               `Tu disposes d'un budget de ${remainingBudget} questions restantes (max ${MAX_QUESTIONS} au total, ${totalQuestionsAsked} déjà posées). ` +
               "Ne pose une question que si elle a une FINALITÉ CLAIRE et ACTIONNABLE pour l'analyse. " +
               "NE POSE PAS de question si l'information est déjà disponible dans le contexte, la base de connaissances, ou les logs ci-dessus. " +
@@ -177,7 +200,7 @@ serve(async (req) => {
               "PHASE 3 — TRAITEMENT HUMAIN (questions 9-13) :\n" +
               "Descends dans le détail opérationnel. Comment chaque tâche est concrètement réalisée au quotidien : " +
               "qui fait quoi, dans quel ordre, avec quels outils existants, quelles manipulations manuelles (copier-coller, saisie, vérification visuelle), " +
-              "quels sont les goulots d'étranglement.\n\n" +
+              "quels sont les goulots d'étranglement. Référence les ACTIONS GRANULAIRES déjà documentées pour aller plus loin.\n\n" +
               "PHASE 4 — RÈGLES MÉTIER (questions 14-17) :\n" +
               "Identifie les règles de gestion : critères de décision, seuils, conditions, validations, contrôles qualité. " +
               "Quand une décision est prise, sur quels critères ? Y a-t-il des matrices de décision, des barèmes, des tables de référence ?\n\n" +
@@ -296,7 +319,6 @@ serve(async (req) => {
       }
     }
 
-    // If no questions returned, mark session complete
     if (questions.length === 0) session_complete = true;
 
     // Log completion
