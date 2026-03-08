@@ -26,6 +26,7 @@ const ProcessUpload = () => {
   const [selectedDept, setSelectedDept] = useState("");
   const [selectedEntity, setSelectedEntity] = useState("");
   const [selectedActivity, setSelectedActivity] = useState("");
+  const [selectedService, setSelectedService] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -77,6 +78,17 @@ const ProcessUpload = () => {
       return data;
     },
     enabled: !!selectedEntity,
+  });
+
+  // Fetch services for selected activity
+  const { data: services = [] } = useQuery({
+    queryKey: ["services", selectedActivity],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("services").select("id, name").eq("activity_id", selectedActivity).order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedActivity,
   });
 
   // Fetch upload history
@@ -170,8 +182,9 @@ const ProcessUpload = () => {
           file_name: selectedFile.name, file_path: filePath,
           company_id: selectedCompany || null, department_id: selectedDept || null,
           entity_id: selectedEntity || null, activity_id: selectedActivity || null,
+          service_id: selectedService || null,
           notes: notes || null, status: "uploaded",
-        })
+        } as any)
         .select("id").single();
       if (insertError) throw insertError;
 
@@ -242,7 +255,7 @@ const ProcessUpload = () => {
       toast({ title: t.upload.contextAssigned, description: t.upload.readyForAnalysis });
       queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
       queryClient.invalidateQueries({ queryKey: ["overview-processes"] });
-      setSelectedFile(null); setSelectedCompany(""); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity("");
+      setSelectedFile(null); setSelectedCompany(""); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity(""); setSelectedService("");
       setNotes(""); setSelectedPdf(null); setUploading(false);
     },
     onError: (error) => {
@@ -336,30 +349,37 @@ const ProcessUpload = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>{t.upload.company}</Label>
-                <Select value={selectedCompany} onValueChange={(v) => { setSelectedCompany(v); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity(""); }}>
+                <Select value={selectedCompany} onValueChange={(v) => { setSelectedCompany(v); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity(""); setSelectedService(""); }}>
                   <SelectTrigger><SelectValue placeholder={t.upload.selectCompany} /></SelectTrigger>
                   <SelectContent>{companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>{t.upload.department}</Label>
-                <Select value={selectedDept} onValueChange={(v) => { setSelectedDept(v); setSelectedEntity(""); setSelectedActivity(""); }} disabled={!selectedCompany}>
+                <Select value={selectedDept} onValueChange={(v) => { setSelectedDept(v); setSelectedEntity(""); setSelectedActivity(""); setSelectedService(""); }} disabled={!selectedCompany}>
                   <SelectTrigger><SelectValue placeholder={t.upload.selectDept} /></SelectTrigger>
                   <SelectContent>{departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>{t.upload.entity}</Label>
-                <Select value={selectedEntity} onValueChange={(v) => { setSelectedEntity(v); setSelectedActivity(""); }} disabled={!selectedDept}>
+                <Select value={selectedEntity} onValueChange={(v) => { setSelectedEntity(v); setSelectedActivity(""); setSelectedService(""); }} disabled={!selectedDept}>
                   <SelectTrigger><SelectValue placeholder={t.upload.selectEntity} /></SelectTrigger>
                   <SelectContent>{entities.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>{t.upload.activity}</Label>
-                <Select value={selectedActivity} onValueChange={setSelectedActivity} disabled={!selectedEntity}>
+                <Select value={selectedActivity} onValueChange={(v) => { setSelectedActivity(v); setSelectedService(""); }} disabled={!selectedEntity}>
                   <SelectTrigger><SelectValue placeholder={t.upload.selectActivity} /></SelectTrigger>
                   <SelectContent>{activities.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{t.upload.service}</Label>
+                <Select value={selectedService} onValueChange={setSelectedService} disabled={!selectedActivity}>
+                  <SelectTrigger><SelectValue placeholder={t.upload.selectService} /></SelectTrigger>
+                  <SelectContent>{services.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>

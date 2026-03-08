@@ -757,6 +757,7 @@ export type Database = {
           file_path: string | null
           id: string
           notes: string | null
+          service_id: string | null
           status: string
           upload_date: string
         }
@@ -769,6 +770,7 @@ export type Database = {
           file_path?: string | null
           id?: string
           notes?: string | null
+          service_id?: string | null
           status?: string
           upload_date?: string
         }
@@ -781,6 +783,7 @@ export type Database = {
           file_path?: string | null
           id?: string
           notes?: string | null
+          service_id?: string | null
           status?: string
           upload_date?: string
         }
@@ -811,6 +814,13 @@ export type Database = {
             columns: ["entity_id"]
             isOneToOne: false
             referencedRelation: "entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uploaded_processes_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]

@@ -262,7 +262,106 @@ serve(async (req) => {
       }
     }
 
+    // ==================== FETCH KB CONTEXT ====================
+    let kbContextBlock = "";
+    try {
+      const { data: proc } = await supabase
+        .from("uploaded_processes")
+        .select("company_id, department_id, entity_id, activity_id, service_id")
+        .eq("id", process_id)
+        .single();
+
+      if (proc?.company_id) {
+        const parts: string[] = ["--- CONTEXTE BASE DE CONNAISSANCES ---"];
+
+        // Company
+        const { data: company } = await supabase.from("companies").select("name, industry, size, strategy_notes").eq("id", proc.company_id).single();
+        if (company) {
+          parts.push(`Entreprise: ${company.name} | Secteur: ${company.industry || "N/A"} | Taille: ${company.size || "N/A"}`);
+          if (company.strategy_notes) parts.push(`Stratégie: ${company.strategy_notes}`);
+        }
+
+        // Department
+        if (proc.department_id) {
+          const { data: dept } = await supabase.from("departments").select("name").eq("id", proc.department_id).single();
+          if (dept) parts.push(`Département: ${dept.name}`);
+        }
+
+        // Entity
+        if (proc.entity_id) {
+          const { data: entity } = await supabase.from("entities").select("name").eq("id", proc.entity_id).single();
+          if (entity) parts.push(`Entité: ${entity.name}`);
+        }
+
+        // Activity
+        if (proc.activity_id) {
+          const { data: activity } = await supabase.from("activities").select("name, description, business_objective").eq("id", proc.activity_id).single();
+          if (activity) {
+            parts.push(`Activité: ${activity.name}${activity.description ? " — " + activity.description : ""}`);
+            if (activity.business_objective) parts.push(`Objectif métier: ${activity.business_objective}`);
+          }
+
+          // Tools linked to activity
+          const { data: actTools } = await supabase.from("activity_tools").select("tool_id, tools(name, purpose, type)").eq("activity_id", proc.activity_id);
+          if (actTools?.length) {
+            const toolNames = actTools.map((t: any) => `${t.tools?.name || "?"}${t.tools?.purpose ? " (" + t.tools.purpose + ")" : ""}`);
+            parts.push(`Outils référencés: ${toolNames.join(", ")}`);
+          }
+        }
+
+        // Service
+        if (proc.service_id) {
+          const { data: service } = await supabase.from("services").select("name, description, business_objective").eq("id", proc.service_id).single();
+          if (service) {
+            parts.push(`Service: ${service.name}${service.description ? " — " + service.description : ""}`);
+            if (service.business_objective) parts.push(`Objectif métier du service: ${service.business_objective}`);
+          }
+        }
+
+        // KB Documents — fetch for all levels
+        const entityLevels: { type: string; id: string }[] = [];
+        if (proc.company_id) entityLevels.push({ type: "company", id: proc.company_id });
+        if (proc.department_id) entityLevels.push({ type: "department", id: proc.department_id });
+        if (proc.entity_id) entityLevels.push({ type: "entity", id: proc.entity_id });
+        if (proc.activity_id) entityLevels.push({ type: "activity", id: proc.activity_id });
+        if (proc.service_id) entityLevels.push({ type: "service", id: proc.service_id });
+
+        const entityIds = entityLevels.map((l) => l.id);
+        const { data: kbDocs } = await supabase.from("kb_documents").select("file_name, file_path, entity_type").in("entity_id", entityIds);
+
+        if (kbDocs?.length) {
+          parts.push("\nDocuments KB associés:");
+          for (const doc of kbDocs.slice(0, 10)) {
+            try {
+              const ext = doc.file_name.toLowerCase().split(".").pop();
+              if (["txt", "csv", "json", "md"].includes(ext || "")) {
+                const { data: fileData } = await supabase.storage.from("process-files").download(doc.file_path);
+                if (fileData) {
+                  const text = await fileData.text();
+                  parts.push(`\n[${doc.entity_type}] ${doc.file_name}:\n${text.slice(0, 5000)}`);
+                }
+              } else {
+                parts.push(`[${doc.entity_type}] ${doc.file_name} (format non textuel, non inclus)`);
+              }
+            } catch (docErr) {
+              console.error(`KB doc download error for ${doc.file_name}:`, docErr);
+            }
+          }
+        }
+
+        parts.push("---");
+        kbContextBlock = parts.join("\n");
+      }
+    } catch (kbErr) {
+      console.error("KB context fetch error:", kbErr);
+    }
+
     // Build multimodal messages
+    const kbInstruction = kbContextBlock
+      ? "\n\nIMPORTANT: Utilise le contexte de la base de connaissances ci-dessous pour enrichir ton analyse. " +
+        "Les outils, objectifs métier et contraintes mentionnés doivent être reflétés dans les étapes extraites.\n\n" + kbContextBlock
+      : "";
+
     const messages: any[] = [
       {
         role: "system",
@@ -284,7 +383,8 @@ serve(async (req) => {
           "- Ne fabrique JAMAIS de noms d'outils, de systèmes ou de technologies non cités.\n" +
           "- Ne génère JAMAIS de chiffres sans données sources. Si tu estimes, préfixe par 'Estimation :'.\n" +
           "- Chaque affirmation doit être traçable vers le document source ou une capture d'écran.\n" +
-          "- En cas de doute, signale-le plutôt que de deviner.",
+          "- En cas de doute, signale-le plutôt que de deviner." +
+          kbInstruction,
       },
     ];
 

@@ -1,0 +1,1 @@
+ALTER TABLE public.uploaded_processes ADD COLUMN service_id uuid REFERENCES public.services(id);
