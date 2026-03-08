@@ -134,6 +134,10 @@ export const translations = {
       stepRemoved: "Étape supprimée",
       processApproved: "Processus approuvé !",
       discoveryAvailable: "La découverte d'automatisation est maintenant disponible.",
+      screenshots: "Captures d'écran",
+      noScreenshots: "Aucune capture d'écran disponible pour ce processus.",
+      viewScreenshot: "Voir la capture",
+      page: "Page",
     },
 
     // Step Edit Modal
