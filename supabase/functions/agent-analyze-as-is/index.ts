@@ -185,6 +185,20 @@ serve(async (req) => {
                         frequency: { type: "string" },
                         volume_estimate: { type: "string" },
                         screenshot_page: { type: "number", description: "Numéro de page PDF correspondant à cette étape" },
+                        actions: {
+                          type: "array",
+                          description: "Liste des actions granulaires observées dans le journal d'événements pour cette étape",
+                          items: {
+                            type: "object",
+                            properties: {
+                              description: { type: "string", description: "Description détaillée de l'action utilisateur/système" },
+                              system_used: { type: "string", description: "Système ou application utilisé pour cette action" },
+                              screenshot_page: { type: "number", description: "Numéro de page PDF correspondant à cette action" },
+                            },
+                            required: ["description"],
+                            additionalProperties: false,
+                          },
+                        },
                       },
                       required: ["name", "description"],
                       additionalProperties: false,
