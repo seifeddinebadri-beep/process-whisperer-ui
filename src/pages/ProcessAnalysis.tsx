@@ -158,6 +158,8 @@ const ProcessAnalysis = () => {
   });
 
   const getPublicUrl = (path: string) => {
+    // If it's already a web path (starts with / or http), use as-is
+    if (path.startsWith("/") || path.startsWith("http")) return path;
     const { data } = supabase.storage.from("process-files").getPublicUrl(path);
     return data.publicUrl;
   };
