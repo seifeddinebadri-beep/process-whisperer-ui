@@ -278,6 +278,33 @@ const ProcessUpload = () => {
             </p>
             <p className="text-xs text-muted-foreground mt-1">CSV, TXT, JSON</p>
           </div>
+
+          {/* PDF Attachment */}
+          <input
+            type="file"
+            ref={pdfInputRef}
+            className="hidden"
+            accept=".pdf"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setSelectedPdf(file);
+                toast({ title: t.upload.pdfAttached, description: file.name });
+              }
+            }}
+          />
+          <div
+            onClick={() => pdfInputRef.current?.click()}
+            className={`mt-3 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              selectedPdf ? "border-primary/50 bg-primary/5" : "border-border hover:border-primary/30"
+            }`}
+          >
+            <FileUp className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+            <p className="text-xs font-medium text-foreground">
+              {selectedPdf ? selectedPdf.name : t.upload.pdfDropHere}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{t.upload.pdfAttachment}</p>
+          </div>
         </CardContent>
       </Card>
 
