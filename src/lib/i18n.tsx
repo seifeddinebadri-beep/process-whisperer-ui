@@ -460,6 +460,8 @@ export const translations = {
       selectDept: "Select department",
       selectEntity: "Select entity",
       selectActivity: "Select activity",
+      selectService: "Select service",
+      service: "Service",
       fileUploaded: "File uploaded",
       contextAssigned: "Context assigned",
       readyForAnalysis: "Process is ready for analysis.",

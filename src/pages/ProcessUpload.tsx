@@ -80,6 +80,17 @@ const ProcessUpload = () => {
     enabled: !!selectedEntity,
   });
 
+  // Fetch services for selected activity
+  const { data: services = [] } = useQuery({
+    queryKey: ["services", selectedActivity],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("services").select("id, name").eq("activity_id", selectedActivity).order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedActivity,
+  });
+
   // Fetch upload history
   const { data: uploadHistory = [] } = useQuery({
     queryKey: ["uploaded_processes"],
