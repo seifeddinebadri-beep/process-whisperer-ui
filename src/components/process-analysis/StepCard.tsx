@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit2, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Edit2, Trash2, ChevronUp, ChevronDown, ImageIcon } from "lucide-react";
 import type { ProcessStep, StepSource } from "./types";
 
 interface StepCardProps {
@@ -13,6 +15,7 @@ interface StepCardProps {
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
   hideActions?: boolean;
+  screenshotUrl?: string;
 }
 
 const decisionLabels: Record<string, string> = {
@@ -28,55 +31,90 @@ const sourceConfig: Record<StepSource, { label: string; className: string }> = {
   merged: { label: "Merged", className: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
 };
 
-export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions }: StepCardProps) => (
-  <Card className="border-l-4 border-l-primary/30">
-    <CardContent className="p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <span className="font-mono text-xs text-muted-foreground mt-1 w-6 shrink-0">{index + 1}.</span>
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="font-medium text-sm">{step.name}</div>
-            <div className="text-xs text-muted-foreground">{step.description}</div>
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {step.source && step.source !== "manual" && sourceConfig[step.source as StepSource] && (
-                <Badge className={`text-[10px] border-0 ${sourceConfig[step.source as StepSource].className}`}>
-                  {sourceConfig[step.source as StepSource].label}
-                </Badge>
-              )}
-              {step.role && <Badge variant="secondary" className="text-[10px]">{step.role}</Badge>}
-              {step.toolUsed && <Badge variant="outline" className="text-[10px]">{step.toolUsed}</Badge>}
-              {step.decisionType && (
-                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
-                  {decisionLabels[step.decisionType]}
-                </Badge>
-              )}
-              {step.frequency && <Badge variant="outline" className="text-[10px]">{step.frequency}</Badge>}
+export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl }: StepCardProps) => {
+  const [showScreenshot, setShowScreenshot] = useState(false);
+  const imgUrl = screenshotUrl || step.screenshotUrl;
+
+  return (
+    <>
+      <Card className="border-l-4 border-l-primary/30">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <span className="font-mono text-xs text-muted-foreground mt-1 w-6 shrink-0">{index + 1}.</span>
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-sm">{step.name}</div>
+                  {imgUrl && (
+                    <button
+                      onClick={() => setShowScreenshot(true)}
+                      className="flex items-center gap-1 text-[10px] text-primary hover:underline"
+                    >
+                      <ImageIcon className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">{step.description}</div>
+
+                {/* Screenshot thumbnail */}
+                {imgUrl && (
+                  <div
+                    className="mt-1 cursor-pointer rounded overflow-hidden border w-24 h-16 bg-muted/30 hover:ring-2 hover:ring-primary/40 transition-all"
+                    onClick={() => setShowScreenshot(true)}
+                  >
+                    <img src={imgUrl} alt="Screenshot" className="w-full h-full object-cover" loading="lazy" />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {step.source && step.source !== "manual" && sourceConfig[step.source as StepSource] && (
+                    <Badge className={`text-[10px] border-0 ${sourceConfig[step.source as StepSource].className}`}>
+                      {sourceConfig[step.source as StepSource].label}
+                    </Badge>
+                  )}
+                  {step.role && <Badge variant="secondary" className="text-[10px]">{step.role}</Badge>}
+                  {step.toolUsed && <Badge variant="outline" className="text-[10px]">{step.toolUsed}</Badge>}
+                  {step.decisionType && (
+                    <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                      {decisionLabels[step.decisionType]}
+                    </Badge>
+                  )}
+                  {step.frequency && <Badge variant="outline" className="text-[10px]">{step.frequency}</Badge>}
+                </div>
+                {step.painPoints && (
+                  <p className="text-[11px] text-destructive/80 mt-1">⚠ {step.painPoints}</p>
+                )}
+                {step.businessRules && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">📋 {step.businessRules}</p>
+                )}
+              </div>
             </div>
-            {step.painPoints && (
-              <p className="text-[11px] text-destructive/80 mt-1">⚠ {step.painPoints}</p>
-            )}
-            {step.businessRules && (
-              <p className="text-[11px] text-muted-foreground mt-0.5">📋 {step.businessRules}</p>
+            {!hideActions && (
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => onMoveUp(index)}>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === total - 1} onClick={() => onMoveDown(index)}>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(step)}>
+                  <Edit2 className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(step.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             )}
           </div>
-        </div>
-        {!hideActions && (
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => onMoveUp(index)}>
-              <ChevronUp className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === total - 1} onClick={() => onMoveDown(index)}>
-              <ChevronDown className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(step)}>
-              <Edit2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(step.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        )}
-      </div>
-    </CardContent>
-  </Card>
-);
+        </CardContent>
+      </Card>
+
+      {/* Full-size screenshot modal */}
+      <Dialog open={showScreenshot} onOpenChange={setShowScreenshot}>
+        <DialogContent className="max-w-4xl p-2">
+          {imgUrl && <img src={imgUrl} alt="Screenshot" className="w-full rounded-lg" />}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};

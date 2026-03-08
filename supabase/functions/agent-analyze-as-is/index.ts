@@ -20,7 +20,10 @@ serve(async (req) => {
   let process_id: string | undefined;
 
   try {
-    ({ process_id } = await req.json());
+    const body = await req.json();
+    process_id = body.process_id;
+    const pdf_path: string | null = body.pdf_path || null;
+
     if (!process_id) {
       return new Response(JSON.stringify({ error: "process_id is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -53,19 +56,80 @@ serve(async (req) => {
         process_id, agent_name: "analyst", action: "analyze_as_is", status: "error",
         message: "No document chunks found for this process.",
       });
-      return new Response(JSON.stringify({ error: "No document chunks found. Upload and parse a document first." }), {
+      return new Response(JSON.stringify({ error: "No document chunks found." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     await supabase.from("agent_logs").insert({
       process_id, agent_name: "analyst", action: "analyze_as_is", status: "started",
-      message: `Reading ${chunks.length} document chunks...`,
+      message: `Reading ${chunks.length} document chunks${pdf_path ? " + PDF screenshots" : ""}...`,
     });
 
     const fullText = chunks.map((c: any) => c.content).join("\n\n");
 
-    // Call LLM with enhanced reasoning
+    // Build multimodal messages
+    const messages: any[] = [
+      {
+        role: "system",
+        content:
+          "Tu es l'agent Analyst, expert en analyse de processus métier. " +
+          "À partir du texte brut d'un document (et éventuellement de captures d'écran PDF), extrais les étapes structurées du processus et le contexte global. " +
+          "En plus de l'extraction, fournis : un résumé de ton analyse (agent_summary), un score de confiance (0-100), " +
+          "et une liste des lacunes identifiées (gaps_identified). " +
+          "Le résumé doit expliquer ce que tu as trouvé, les lacunes doivent pointer les informations manquantes. " +
+          "Si des captures d'écran sont fournies, utilise-les pour identifier des étapes visuelles, des interfaces système, et des actions utilisateur. " +
+          "Pour chaque étape liée à une capture d'écran, indique le numéro de page dans screenshot_page. " +
+          "Retourne UNIQUEMENT via l'appel de fonction fourni.\n\n" +
+          "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
+          "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le document ou les captures d'écran.\n" +
+          "- Si une information est absente, écris 'Non mentionné dans le document'.\n" +
+          "- Ne fabrique JAMAIS de noms d'outils, de systèmes ou de technologies non cités.\n" +
+          "- Ne génère JAMAIS de chiffres sans données sources. Si tu estimes, préfixe par 'Estimation :'.\n" +
+          "- Chaque affirmation doit être traçable vers le document source ou une capture d'écran.\n" +
+          "- En cas de doute, signale-le plutôt que de deviner.",
+      },
+    ];
+
+    // Build user content (text + optional images)
+    const userContent: any[] = [
+      { type: "text", text: `Analyse ce document et extrais les étapes de processus :\n\n${fullText.slice(0, 30000)}` },
+    ];
+
+    // If PDF was uploaded, download and include pages as images
+    let screenshotPaths: { page: number; path: string }[] = [];
+    if (pdf_path) {
+      try {
+        const { data: pdfData, error: pdfError } = await supabase.storage
+          .from("process-files")
+          .download(pdf_path);
+
+        if (!pdfError && pdfData) {
+          // Convert PDF to base64 and send as document to Gemini
+          const pdfBytes = await pdfData.arrayBuffer();
+          const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+          
+          userContent.push({
+            type: "image_url",
+            image_url: {
+              url: `data:application/pdf;base64,${pdfBase64}`,
+            },
+          });
+          
+          userContent.push({
+            type: "text",
+            text: "\n\nLe PDF ci-dessus contient des captures d'écran du processus. Analyse chaque page et associe les étapes identifiées aux numéros de page correspondants via le champ screenshot_page.",
+          });
+        }
+      } catch (e) {
+        console.error("PDF processing error:", e);
+        // Continue without PDF — text analysis still works
+      }
+    }
+
+    messages.push({ role: "user", content: userContent });
+
+    // Call LLM
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -73,34 +137,8 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Tu es l'agent Analyst, expert en analyse de processus métier. " +
-              "À partir du texte brut d'un document, extrais les étapes structurées du processus et le contexte global. " +
-              "En plus de l'extraction, fournis : un résumé de ton analyse (agent_summary), un score de confiance (0-100), " +
-              "et une liste des lacunes identifiées (gaps_identified). " +
-              "Le résumé doit expliquer ce que tu as trouvé, les lacunes doivent pointer les informations manquantes. " +
-              "Retourne UNIQUEMENT via l'appel de fonction fourni.\n\n" +
-              "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
-              "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le document fourni.\n" +
-              "- Si une information est absente du document source, écris explicitement 'Non mentionné dans le document' ou 'Information non disponible'.\n" +
-              "- Ne fabrique JAMAIS de noms d'outils, de systèmes, d'APIs, ou de technologies qui ne sont pas cités dans le document.\n" +
-              "- Ne génère JAMAIS de chiffres (volumes, coûts, durées, pourcentages) sans les baser sur des données du document. Si tu dois estimer, préfixe TOUJOURS par 'Estimation :' et justifie.\n" +
-              "- Ne crée JAMAIS de règles métier fictives. Cite uniquement celles mentionnées dans le document.\n" +
-              "- Chaque affirmation doit pouvoir être tracée vers un élément du document source.\n" +
-              "- En cas de doute ou d'ambiguïté, signale-le explicitement plutôt que de deviner.\n" +
-              "- N'extrapole pas au-delà de ce qui est raisonnablement déductible des données fournies.\n" +
-              "- Les étapes doivent provenir UNIQUEMENT du texte du document. Si une étape est inférée (non explicitement mentionnée), marque sa source comme 'inféré' et explique pourquoi dans la description.\n" +
-              "- Ne remplis JAMAIS un champ avec des données plausibles mais inventées. Laisse-le vide ou écris 'Non mentionné'.",
-          },
-          {
-            role: "user",
-            content: `Analyse ce document et extrais les étapes de processus :\n\n${fullText.slice(0, 30000)}`,
-          },
-        ],
+        model: "google/gemini-2.5-flash",
+        messages,
         tools: [
           {
             type: "function",
@@ -110,12 +148,12 @@ serve(async (req) => {
               parameters: {
                 type: "object",
                 properties: {
-                  agent_summary: { type: "string", description: "Résumé en 2-3 phrases de l'analyse effectuée par l'agent" },
-                  confidence: { type: "number", description: "Score de confiance de 0 à 100" },
+                  agent_summary: { type: "string", description: "Résumé en 2-3 phrases de l'analyse" },
+                  confidence: { type: "number", description: "Score de confiance 0-100" },
                   gaps_identified: {
                     type: "array",
                     items: { type: "string" },
-                    description: "Liste des lacunes ou informations manquantes identifiées",
+                    description: "Lacunes ou informations manquantes",
                   },
                   context: {
                     type: "object",
@@ -146,6 +184,7 @@ serve(async (req) => {
                         business_rules: { type: "string" },
                         frequency: { type: "string" },
                         volume_estimate: { type: "string" },
+                        screenshot_page: { type: "number", description: "Numéro de page PDF correspondant à cette étape" },
                       },
                       required: ["name", "description"],
                       additionalProperties: false,
@@ -174,6 +213,11 @@ serve(async (req) => {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (status === 402) {
+        return new Response(JSON.stringify({ error: "Payment required" }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       throw new Error(`AI error [${status}]: ${errText}`);
     }
 
@@ -186,6 +230,7 @@ serve(async (req) => {
     // Delete existing data
     await supabase.from("process_steps").delete().eq("process_id", process_id);
     await supabase.from("process_context").delete().eq("process_id", process_id);
+    await supabase.from("process_screenshots").delete().eq("process_id", process_id);
 
     // Insert context
     if (context) {
@@ -197,6 +242,16 @@ serve(async (req) => {
         pain_points_summary: context.pain_points_summary || null,
         volume_and_frequency: context.volume_and_frequency || null,
         stakeholder_notes: context.stakeholder_notes || null,
+      });
+    }
+
+    // If PDF was provided, store a reference in process_screenshots
+    if (pdf_path) {
+      await supabase.from("process_screenshots").insert({
+        process_id,
+        file_path: pdf_path,
+        page_number: 0,
+        caption: "Document PDF source",
       });
     }
 
@@ -217,6 +272,9 @@ serve(async (req) => {
         frequency: s.frequency || null,
         volume_estimate: s.volume_estimate || null,
         source: "agent_analyst",
+        screenshot_url: s.screenshot_page != null && pdf_path
+          ? `page:${s.screenshot_page}`
+          : null,
       }));
       await supabase.from("process_steps").insert(stepInserts);
     }
@@ -233,6 +291,7 @@ serve(async (req) => {
         confidence,
         gaps_count: gaps_identified?.length || 0,
         gaps: gaps_identified,
+        has_pdf: !!pdf_path,
       },
     });
 
@@ -244,6 +303,7 @@ serve(async (req) => {
         agent_summary,
         confidence,
         gaps_identified,
+        has_pdf: !!pdf_path,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
