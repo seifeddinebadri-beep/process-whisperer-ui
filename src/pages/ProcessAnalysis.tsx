@@ -16,7 +16,7 @@ import { EditableBadges } from "@/components/process-analysis/EditableBadges";
 import { StepComparisonView } from "@/components/process-analysis/StepComparisonView";
 import { useLang } from "@/lib/i18n";
 import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
-import type { ProcessStep, ProcessContext, ProcessScreenshot } from "@/components/process-analysis/types";
+import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
