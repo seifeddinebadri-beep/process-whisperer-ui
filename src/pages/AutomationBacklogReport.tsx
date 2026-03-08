@@ -1,30 +1,41 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useLang } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, Download, FileText, Loader2, Sparkles, Star,
-  BarChart3, Layers, Wrench, CheckCircle2, XCircle
+  TrendingUp, Layers, Wrench, Target, Zap, Clock, CheckCircle2,
+  BarChart3, PieChart, ArrowRight, Shield, DollarSign
 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import {
+  PieChart as RePieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from "recharts";
+
+const IMPACT_CONFIG: Record<string, { label: string; color: string; bgClass: string; textClass: string }> = {
+  high: { label: "Élevé", color: "hsl(142, 71%, 45%)", bgClass: "bg-green-500/10", textClass: "text-green-700" },
+  medium: { label: "Moyen", color: "hsl(38, 92%, 50%)", bgClass: "bg-amber-500/10", textClass: "text-amber-700" },
+  low: { label: "Faible", color: "hsl(215, 20%, 65%)", bgClass: "bg-muted", textClass: "text-muted-foreground" },
+};
+
+const COMPLEXITY_COLORS: Record<string, string> = {
+  low: "hsl(142, 71%, 45%)",
+  medium: "hsl(38, 92%, 50%)",
+  high: "hsl(0, 84%, 60%)",
+};
 
 const impactOrder: Record<string, number> = { high: 3, medium: 2, low: 1 };
-const impactColors: Record<string, string> = {
-  low: "bg-secondary text-secondary-foreground",
-  medium: "bg-amber-100 text-amber-800",
-  high: "bg-green-100 text-green-800",
-};
 
 const AutomationBacklogReport = () => {
   const navigate = useNavigate();
-  const { t } = useLang();
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const { data: useCases = [], isLoading: loadingUC } = useQuery({
     queryKey: ["report-use-cases"],
@@ -71,7 +82,6 @@ const AutomationBacklogReport = () => {
     [useCases]
   );
 
-  // Executive summary stats
   const stats = useMemo(() => {
     const byImpact: Record<string, number> = { high: 0, medium: 0, low: 0 };
     const byComplexity: Record<string, number> = {};
@@ -103,8 +113,32 @@ const AutomationBacklogReport = () => {
       detailedCount: details.length,
       pddCount: pdds.length,
       toolFreq: Object.entries(toolFreq).sort(([, a], [, b]) => b - a),
+      readinessPercent: useCases.length > 0 ? Math.round((details.length / useCases.length) * 100) : 0,
+      pddPercent: useCases.length > 0 ? Math.round((pdds.length / useCases.length) * 100) : 0,
     };
   }, [useCases, details, pdds]);
+
+  const impactChartData = useMemo(() =>
+    Object.entries(stats.byImpact)
+      .filter(([, v]) => v > 0)
+      .map(([key, value]) => ({
+        name: IMPACT_CONFIG[key]?.label || key,
+        value,
+        color: IMPACT_CONFIG[key]?.color || "hsl(215, 20%, 65%)",
+      })),
+    [stats.byImpact]
+  );
+
+  const complexityChartData = useMemo(() =>
+    Object.entries(stats.byComplexity)
+      .filter(([, v]) => v > 0)
+      .map(([key, value]) => ({
+        name: key === "unknown" ? "N/A" : key.charAt(0).toUpperCase() + key.slice(1),
+        value,
+        fill: COMPLEXITY_COLORS[key] || "hsl(215, 20%, 65%)",
+      })),
+    [stats.byComplexity]
+  );
 
   // --- CSV Export ---
   const exportCSV = (type: "use_cases" | "variants") => {
@@ -112,43 +146,38 @@ const AutomationBacklogReport = () => {
     if (type === "use_cases") {
       csv = "Titre,Description,Processus,Impact,Complexité,ROI,Outils,Nb Variantes,Détaillé,PDD,Créé le\n";
       sorted.forEach((uc: any) => {
-        const row = [
+        csv += [
           `"${(uc.title || "").replace(/"/g, '""')}"`,
           `"${(uc.description || "").replace(/"/g, '""')}"`,
           `"${uc.uploaded_processes?.file_name || ""}"`,
-          uc.impact || "",
-          uc.complexity || "",
+          uc.impact || "", uc.complexity || "",
           `"${uc.roi_estimate || ""}"`,
           `"${(uc.tools_suggested || []).join(", ")}"`,
           uc.automation_variants?.length || 0,
           detailMap.has(uc.id) ? "Oui" : "Non",
           pddSet.has(uc.id) ? "Oui" : "Non",
           format(new Date(uc.created_at), "yyyy-MM-dd HH:mm"),
-        ];
-        csv += row.join(",") + "\n";
+        ].join(",") + "\n";
       });
     } else {
       csv = "Cas d'usage,Variante,N°,Approche,Complexité,Impact,ROI,Coût,Délai,Recommandée,Outils\n";
       sorted.forEach((uc: any) => {
         (uc.automation_variants || []).forEach((v: any) => {
-          const row = [
+          csv += [
             `"${(uc.title || "").replace(/"/g, '""')}"`,
             `"${(v.variant_name || "").replace(/"/g, '""')}"`,
             v.variant_number,
             `"${(v.approach_description || "").replace(/"/g, '""')}"`,
-            v.complexity || "",
-            v.impact || "",
+            v.complexity || "", v.impact || "",
             `"${v.roi_estimate || ""}"`,
             `"${v.estimated_cost || ""}"`,
             `"${v.estimated_timeline || ""}"`,
             v.recommended ? "Oui" : "Non",
             `"${(v.tools_suggested || []).join(", ")}"`,
-          ];
-          csv += row.join(",") + "\n";
+          ].join(",") + "\n";
         });
       });
     }
-
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -160,316 +189,477 @@ const AutomationBacklogReport = () => {
 
   // --- PDF Export ---
   const exportPDF = () => {
-    const variantRows = (variants: any[]) =>
-      variants.map((v: any) => `
-        <tr>
-          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${v.variant_name}${v.recommended ? ' ⭐' : ''}</td>
-          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${v.complexity || '—'}</td>
-          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${v.impact || '—'}</td>
-          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${v.roi_estimate || '—'}</td>
-          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${v.estimated_cost || '—'}</td>
-          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${v.estimated_timeline || '—'}</td>
-          <td style="padding:4px 8px;border:1px solid #e5e7eb;font-size:11px;">${(v.tools_suggested || []).join(', ')}</td>
-        </tr>
-      `).join('');
-
-    const ucSections = sorted.map((uc: any, i: number) => {
-      const detail = detailMap.get(uc.id);
-      const hasPdd = pddSet.has(uc.id);
-      const detailContent = detail?.detail_content;
-      return `
-        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;padding:16px;">
-          <h3 style="margin:0 0 8px;font-size:15px;">${i + 1}. ${uc.title}</h3>
-          <p style="margin:0 0 8px;color:#6b7280;font-size:12px;">${uc.description || ''}</p>
-          <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-            <span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;">Impact: ${uc.impact || '—'}</span>
-            <span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:12px;font-size:11px;">Complexité: ${uc.complexity || '—'}</span>
-            ${uc.roi_estimate ? `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:12px;font-size:11px;">ROI: ${uc.roi_estimate}</span>` : ''}
-            ${hasPdd ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;">📄 PDD</span>' : ''}
-            ${detail ? '<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;">✨ Détaillé</span>' : ''}
-          </div>
-          <p style="font-size:11px;color:#9ca3af;">Processus: ${uc.uploaded_processes?.file_name || '—'} · Outils: ${(uc.tools_suggested || []).join(', ') || '—'}</p>
-          ${(uc.automation_variants?.length > 0) ? `
-            <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;">
-              <thead><tr style="background:#f9fafb;">
-                <th style="padding:4px 8px;border:1px solid #e5e7eb;text-align:left;">Variante</th>
-                <th style="padding:4px 8px;border:1px solid #e5e7eb;">Complexité</th>
-                <th style="padding:4px 8px;border:1px solid #e5e7eb;">Impact</th>
-                <th style="padding:4px 8px;border:1px solid #e5e7eb;">ROI</th>
-                <th style="padding:4px 8px;border:1px solid #e5e7eb;">Coût</th>
-                <th style="padding:4px 8px;border:1px solid #e5e7eb;">Délai</th>
-                <th style="padding:4px 8px;border:1px solid #e5e7eb;">Outils</th>
-              </tr></thead>
-              <tbody>${variantRows(uc.automation_variants)}</tbody>
-            </table>
-          ` : ''}
-          ${detailContent ? `<div style="margin-top:8px;font-size:11px;color:#374151;"><strong>Détails :</strong> ${typeof detailContent === 'object' ? JSON.stringify(detailContent).slice(0, 500) : String(detailContent).slice(0, 500)}…</div>` : ''}
+    const topOpportunities = sorted.slice(0, 5);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport Exécutif — Backlog Automatisation</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #fff; padding: 40px 48px; line-height: 1.5; }
+      @media print { body { padding: 24px 32px; } @page { size: A4 landscape; margin: 16mm; } }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 3px solid #2563eb; }
+      .header h1 { font-size: 26px; font-weight: 700; color: #1e293b; }
+      .header .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; }
+      .header .date { font-size: 12px; color: #94a3b8; text-align: right; }
+      .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+      .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 20px; text-align: center; }
+      .kpi .value { font-size: 32px; font-weight: 800; color: #1e293b; }
+      .kpi .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+      .kpi.highlight { border-color: #2563eb; background: linear-gradient(135deg, #eff6ff, #dbeafe); }
+      .kpi.highlight .value { color: #1d4ed8; }
+      .kpi.green { border-color: #22c55e; background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
+      .kpi.green .value { color: #16a34a; }
+      .section { margin-bottom: 28px; }
+      .section-title { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 8px; }
+      .section-title .emoji { font-size: 18px; }
+      .progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+      .progress-label { font-size: 12px; color: #475569; min-width: 100px; }
+      .progress-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+      .progress-fill { height: 100%; border-radius: 4px; }
+      .progress-value { font-size: 12px; font-weight: 600; min-width: 40px; text-align: right; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th { background: #f1f5f9; color: #475569; font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 2px solid #e2e8f0; }
+      td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+      tr:hover td { background: #f8fafc; }
+      .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+      .badge-high { background: #dcfce7; color: #166534; }
+      .badge-medium { background: #fef3c7; color: #92400e; }
+      .badge-low { background: #f1f5f9; color: #64748b; }
+      .badge-rec { background: #dbeafe; color: #1d4ed8; }
+      .tools-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+      .tool-tag { background: #eff6ff; color: #1d4ed8; padding: 4px 12px; border-radius: 14px; font-size: 11px; font-weight: 500; }
+      .opportunity-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 12px; page-break-inside: avoid; }
+      .opportunity-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+      .opportunity-card p { font-size: 11px; color: #64748b; margin-bottom: 8px; }
+      .meta-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+      .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; text-align: center; }
+    </style></head><body>
+      <div class="header">
+        <div>
+          <h1>📊 Rapport Exécutif — Backlog Automatisation</h1>
+          <div class="subtitle">Synthèse des opportunités d'automatisation identifiées par l'IA</div>
         </div>
-      `;
-    }).join('');
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport Backlog Automatisation</title>
-      <style>body{font-family:system-ui,sans-serif;margin:32px;color:#111827;} @media print{body{margin:16px;}}</style>
-    </head><body>
-      <h1 style="font-size:22px;margin-bottom:4px;">📊 Rapport Backlog — Découverte d'Automatisation</h1>
-      <p style="color:#6b7280;font-size:13px;margin-bottom:24px;">Généré le ${format(new Date(), "dd MMMM yyyy à HH:mm", { locale: fr })}</p>
-      
-      <h2 style="font-size:16px;border-bottom:2px solid #e5e7eb;padding-bottom:4px;">Résumé Exécutif</h2>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin:12px 0 24px;">
-        <div style="background:#f9fafb;padding:12px 16px;border-radius:8px;min-width:120px;text-align:center;"><div style="font-size:24px;font-weight:700;">${stats.total}</div><div style="font-size:11px;color:#6b7280;">Cas d'usage</div></div>
-        <div style="background:#f9fafb;padding:12px 16px;border-radius:8px;min-width:120px;text-align:center;"><div style="font-size:24px;font-weight:700;">${stats.totalVariants}</div><div style="font-size:11px;color:#6b7280;">Variantes</div></div>
-        <div style="background:#f9fafb;padding:12px 16px;border-radius:8px;min-width:120px;text-align:center;"><div style="font-size:24px;font-weight:700;">${stats.processCount}</div><div style="font-size:11px;color:#6b7280;">Processus</div></div>
-        <div style="background:#dcfce7;padding:12px 16px;border-radius:8px;min-width:120px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#166534;">${stats.byImpact.high || 0}</div><div style="font-size:11px;color:#166534;">Impact élevé</div></div>
-        <div style="background:#fef3c7;padding:12px 16px;border-radius:8px;min-width:120px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#92400e;">${stats.byImpact.medium || 0}</div><div style="font-size:11px;color:#92400e;">Impact moyen</div></div>
-        <div style="background:#f9fafb;padding:12px 16px;border-radius:8px;min-width:120px;text-align:center;"><div style="font-size:24px;font-weight:700;">${stats.detailedCount}</div><div style="font-size:11px;color:#6b7280;">Détaillés</div></div>
-        <div style="background:#f9fafb;padding:12px 16px;border-radius:8px;min-width:120px;text-align:center;"><div style="font-size:24px;font-weight:700;">${stats.pddCount}</div><div style="font-size:11px;color:#6b7280;">PDD générés</div></div>
+        <div class="date">
+          Généré le ${format(new Date(), "dd MMMM yyyy", { locale: fr })}<br/>
+          <strong>AutoDiscover</strong>
+        </div>
       </div>
 
-      <h2 style="font-size:16px;border-bottom:2px solid #e5e7eb;padding-bottom:4px;">Détail par Cas d'Usage</h2>
-      ${ucSections}
+      <div class="kpi-row">
+        <div class="kpi highlight"><div class="value">${stats.total}</div><div class="label">Opportunités identifiées</div></div>
+        <div class="kpi green"><div class="value">${stats.byImpact.high || 0}</div><div class="label">Impact élevé</div></div>
+        <div class="kpi"><div class="value">${stats.totalVariants}</div><div class="label">Scénarios d'implémentation</div></div>
+        <div class="kpi"><div class="value">${stats.processCount}</div><div class="label">Processus couverts</div></div>
+      </div>
 
-      <h2 style="font-size:16px;border-bottom:2px solid #e5e7eb;padding-bottom:4px;margin-top:32px;">Technologies & Outils</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-        ${stats.toolFreq.map(([tool, count]) => `<span style="background:#e0e7ff;color:#3730a3;padding:4px 12px;border-radius:12px;font-size:12px;">${tool} (${count})</span>`).join('')}
-        ${stats.toolFreq.length === 0 ? '<span style="color:#9ca3af;font-size:12px;">Aucun outil suggéré</span>' : ''}
+      <div class="section">
+        <div class="section-title"><span class="emoji">📈</span> Maturité du Backlog</div>
+        <div class="progress-row">
+          <span class="progress-label">Analyse détaillée</span>
+          <div class="progress-bar"><div class="progress-fill" style="width:${stats.readinessPercent}%;background:#2563eb;"></div></div>
+          <span class="progress-value">${stats.readinessPercent}%</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label">PDD générés</span>
+          <div class="progress-bar"><div class="progress-fill" style="width:${stats.pddPercent}%;background:#22c55e;"></div></div>
+          <span class="progress-value">${stats.pddPercent}%</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><span class="emoji">🎯</span> Top 5 — Opportunités Prioritaires</div>
+        ${topOpportunities.map((uc: any, i: number) => {
+          const variants = uc.automation_variants || [];
+          const recommended = variants.find((v: any) => v.recommended);
+          return `<div class="opportunity-card">
+            <h4>${i + 1}. ${uc.title}</h4>
+            <p>${uc.description || ""}</p>
+            <div class="meta-row">
+              <span class="badge badge-${uc.impact || "medium"}">Impact ${IMPACT_CONFIG[uc.impact || "medium"]?.label}</span>
+              <span class="badge badge-${uc.complexity === "high" ? "medium" : uc.complexity || "low"}">Complexité ${uc.complexity || "—"}</span>
+              ${uc.roi_estimate ? `<span class="badge badge-rec">ROI ${uc.roi_estimate}</span>` : ""}
+              ${recommended ? `<span class="badge badge-rec">⭐ ${recommended.variant_name}</span>` : ""}
+            </div>
+            <div style="font-size:11px;color:#64748b;">
+              Processus : ${uc.uploaded_processes?.file_name || "—"} · ${variants.length} variante(s)
+              ${(uc.tools_suggested || []).length > 0 ? ` · Outils : ${uc.tools_suggested.join(", ")}` : ""}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+
+      <div class="section" style="page-break-before:always;">
+        <div class="section-title"><span class="emoji">📋</span> Vue Complète du Backlog</div>
+        <table>
+          <thead><tr>
+            <th>#</th><th>Opportunité</th><th>Processus</th><th>Impact</th><th>Complexité</th><th>ROI</th><th>Variantes</th><th>Statut</th>
+          </tr></thead>
+          <tbody>
+            ${sorted.map((uc: any, i: number) => `<tr>
+              <td>${i + 1}</td>
+              <td style="font-weight:500;">${uc.title}</td>
+              <td style="color:#64748b;">${uc.uploaded_processes?.file_name || "—"}</td>
+              <td><span class="badge badge-${uc.impact || "medium"}">${IMPACT_CONFIG[uc.impact || "medium"]?.label}</span></td>
+              <td>${uc.complexity || "—"}</td>
+              <td>${uc.roi_estimate || "—"}</td>
+              <td>${uc.automation_variants?.length || 0}</td>
+              <td>${detailMap.has(uc.id) ? "✨ Détaillé" : ""}${pddSet.has(uc.id) ? " 📄 PDD" : ""}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><span class="emoji">🛠️</span> Écosystème Technologique</div>
+        <div class="tools-grid">
+          ${stats.toolFreq.map(([tool, count]) => `<span class="tool-tag">${tool} (×${count})</span>`).join("")}
+          ${stats.toolFreq.length === 0 ? '<span style="color:#94a3b8;font-size:12px;">Aucun outil identifié</span>' : ""}
+        </div>
+      </div>
+
+      <div class="footer">
+        Document généré automatiquement par AutoDiscover · ${format(new Date(), "dd MMMM yyyy à HH:mm", { locale: fr })} · Confidentiel
       </div>
     </body></html>`;
 
     const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-      setTimeout(() => w.print(), 500);
-    }
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
   };
 
   if (isLoading) {
     return (
-      <div className="max-w-6xl flex justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Chargement du rapport…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="max-w-7xl mx-auto space-y-8 pb-12" ref={reportRef}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/automation-discovery")}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" className="mt-1" onClick={() => navigate("/automation-discovery")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h2 className="text-lg font-semibold">📊 Rapport Backlog — Découverte d'Automatisation</h2>
-            <p className="text-sm text-muted-foreground">
-              Généré le {format(new Date(), "dd MMMM yyyy à HH:mm", { locale: fr })}
+            <h1 className="text-2xl font-bold tracking-tight">Rapport Exécutif</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Synthèse du backlog d'automatisation · Généré le {format(new Date(), "dd MMMM yyyy", { locale: fr })}
             </p>
           </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => exportCSV("use_cases")}>
-            <Download className="h-3.5 w-3.5 mr-1" /> CSV Cas d'usage
+            <Download className="h-3.5 w-3.5 mr-1.5" /> CSV
           </Button>
           <Button variant="outline" size="sm" onClick={() => exportCSV("variants")}>
-            <Download className="h-3.5 w-3.5 mr-1" /> CSV Variantes
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Variantes CSV
           </Button>
-          <Button size="sm" onClick={exportPDF}>
-            <FileText className="h-3.5 w-3.5 mr-1" /> Export PDF
+          <Button size="sm" className="shadow-sm" onClick={exportPDF}>
+            <FileText className="h-3.5 w-3.5 mr-1.5" /> Exporter PDF
           </Button>
         </div>
       </div>
 
-      {/* Executive Summary */}
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard icon={Target} label="Opportunités identifiées" value={stats.total} accent />
+        <KpiCard icon={TrendingUp} label="Impact élevé" value={stats.byImpact.high || 0} variant="green" />
+        <KpiCard icon={Layers} label="Scénarios d'implémentation" value={stats.totalVariants} />
+        <KpiCard icon={Zap} label="Processus analysés" value={stats.processCount} />
+      </div>
+
+      {/* Maturity + Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Maturity Card */}
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" /> Maturité du Backlog
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <ProgressMetric label="Analyse détaillée" value={stats.detailedCount} total={stats.total} percent={stats.readinessPercent} color="bg-primary" />
+            <ProgressMetric label="PDD générés" value={stats.pddCount} total={stats.total} percent={stats.pddPercent} color="bg-green-500" />
+            <Separator />
+            <div className="grid grid-cols-2 gap-3">
+              <MiniStat label="Cas détaillés" value={stats.detailedCount} icon={Sparkles} />
+              <MiniStat label="Documents PDD" value={stats.pddCount} icon={FileText} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Impact Distribution */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <PieChart className="h-4 w-4 text-primary" /> Répartition par Impact
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <RePieChart>
+                <Pie data={impactChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} strokeWidth={0}>
+                  {impactChartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Legend verticalAlign="bottom" height={36} formatter={(value: string) => <span className="text-xs">{value}</span>} />
+                <Tooltip formatter={(value: number) => [`${value} cas`, ""]} />
+              </RePieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Complexity Distribution */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" /> Répartition par Complexité
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={complexityChartData} barCategoryGap="30%">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(value: number) => [`${value} cas`, ""]} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {complexityChartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Priority Ranking */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" /> Résumé Exécutif
-          </CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" /> Classement Prioritaire
+            </CardTitle>
+            <Badge variant="secondary" className="text-xs">{sorted.length} opportunités</Badge>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-            <StatCard label="Cas d'usage" value={stats.total} />
-            <StatCard label="Variantes" value={stats.totalVariants} />
-            <StatCard label="Processus" value={stats.processCount} />
-            <StatCard label="Impact élevé" value={stats.byImpact.high || 0} className="text-green-700" />
-            <StatCard label="Impact moyen" value={stats.byImpact.medium || 0} className="text-amber-700" />
-            <StatCard label="Détaillés" value={stats.detailedCount} />
-            <StatCard label="PDD" value={stats.pddCount} />
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left font-medium text-muted-foreground px-4 py-3 w-8">#</th>
+                  <th className="text-left font-medium text-muted-foreground px-4 py-3">Opportunité</th>
+                  <th className="text-left font-medium text-muted-foreground px-4 py-3">Processus</th>
+                  <th className="text-left font-medium text-muted-foreground px-4 py-3">Impact</th>
+                  <th className="text-left font-medium text-muted-foreground px-4 py-3">Complexité</th>
+                  <th className="text-left font-medium text-muted-foreground px-4 py-3">ROI</th>
+                  <th className="text-center font-medium text-muted-foreground px-4 py-3">Variantes</th>
+                  <th className="text-center font-medium text-muted-foreground px-4 py-3">Statut</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((uc: any, i: number) => (
+                  <tr key={uc.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors cursor-pointer group" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{i + 1}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{uc.title}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5 max-w-[300px]">{uc.description}</div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{uc.uploaded_processes?.file_name || "—"}</td>
+                    <td className="px-4 py-3">
+                      <ImpactBadge impact={uc.impact} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="outline" className="text-xs capitalize font-medium">{uc.complexity || "—"}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {uc.roi_estimate ? (
+                        <span className="text-xs font-medium flex items-center gap-1">
+                          <DollarSign className="h-3 w-3 text-muted-foreground" />{uc.roi_estimate}
+                        </span>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-xs font-semibold">{uc.automation_variants?.length || 0}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {detailMap.has(uc.id) && <Sparkles className="h-3.5 w-3.5 text-primary" />}
+                        {pddSet.has(uc.id) && <FileText className="h-3.5 w-3.5 text-green-600" />}
+                        {!detailMap.has(uc.id) && !pddSet.has(uc.id) && <span className="text-xs text-muted-foreground">—</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>
 
-      {/* Priority Matrix */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Layers className="h-4 w-4" /> Matrice de Priorité
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Cas d'usage</TableHead>
-                <TableHead>Processus</TableHead>
-                <TableHead>Impact</TableHead>
-                <TableHead>Complexité</TableHead>
-                <TableHead>ROI</TableHead>
-                <TableHead>Variantes</TableHead>
-                <TableHead>Outils</TableHead>
-                <TableHead>Statut</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((uc: any, i: number) => (
-                <TableRow key={uc.id} className="cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
-                  <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
-                  <TableCell className="font-medium text-sm max-w-[200px] truncate">{uc.title}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{uc.uploaded_processes?.file_name || "—"}</TableCell>
-                  <TableCell>
-                    <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>{uc.impact || "—"}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs capitalize">{uc.complexity || "—"}</Badge>
-                  </TableCell>
-                  <TableCell className="text-xs">{uc.roi_estimate || "—"}</TableCell>
-                  <TableCell className="text-xs">{uc.automation_variants?.length || 0}</TableCell>
-                  <TableCell className="text-xs max-w-[150px] truncate">{(uc.tools_suggested || []).join(", ") || "—"}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {detailMap.has(uc.id) && <Sparkles className="h-3.5 w-3.5 text-primary" />}
-                      {pddSet.has(uc.id) && <FileText className="h-3.5 w-3.5 text-green-600" />}
-                      {!detailMap.has(uc.id) && !pddSet.has(uc.id) && <span className="text-xs text-muted-foreground">—</span>}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Top Opportunities Detail */}
+      {sorted.filter((uc: any) => uc.impact === "high").length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <Star className="h-4 w-4 text-amber-500" /> Opportunités à Fort Impact — Vue Détaillée
+          </h2>
+          {sorted.filter((uc: any) => uc.impact === "high").map((uc: any, i: number) => (
+            <OpportunityCard key={uc.id} uc={uc} index={i} detailMap={detailMap} pddSet={pddSet} navigate={navigate} />
+          ))}
+        </div>
+      )}
 
-      {/* Per Use Case Detail Cards */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Sparkles className="h-4 w-4" /> Détail par Cas d'Usage
-        </h3>
-        {sorted.map((uc: any, i: number) => {
-          const detail = detailMap.get(uc.id);
-          const variants = uc.automation_variants || [];
-          return (
-            <Card key={uc.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-sm font-medium">
-                    {i + 1}. {uc.title}
-                  </CardTitle>
-                  <div className="flex gap-1.5 flex-wrap">
-                    <Badge className={`text-xs capitalize ${impactColors[uc.impact || "medium"]}`}>{uc.impact}</Badge>
-                    <Badge variant="outline" className="text-xs capitalize">{uc.complexity}</Badge>
-                    {uc.roi_estimate && <Badge variant="outline" className="text-xs">ROI: {uc.roi_estimate}</Badge>}
-                    {pddSet.has(uc.id) && <Badge variant="outline" className="text-xs gap-1 border-green-500/30 text-green-700"><FileText className="h-3 w-3" /> PDD</Badge>}
-                    {detail && <Badge variant="outline" className="text-xs gap-1 border-primary/30 text-primary"><Sparkles className="h-3 w-3" /> Détaillé</Badge>}
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{uc.description}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  Processus : {uc.uploaded_processes?.file_name || "—"} · Outils : {(uc.tools_suggested || []).join(", ") || "—"}
-                </p>
-              </CardHeader>
-              {variants.length > 0 && (
-                <CardContent className="pt-0">
-                  <p className="text-xs font-medium mb-2">Variantes ({variants.length})</p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Variante</TableHead>
-                        <TableHead className="text-xs">Complexité</TableHead>
-                        <TableHead className="text-xs">Impact</TableHead>
-                        <TableHead className="text-xs">ROI</TableHead>
-                        <TableHead className="text-xs">Coût</TableHead>
-                        <TableHead className="text-xs">Délai</TableHead>
-                        <TableHead className="text-xs">Outils</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {variants.sort((a: any, b: any) => a.variant_number - b.variant_number).map((v: any) => (
-                        <TableRow key={v.id}>
-                          <TableCell className="text-xs font-medium">
-                            {v.variant_name} {v.recommended && <Star className="inline h-3 w-3 text-amber-500 ml-1" />}
-                          </TableCell>
-                          <TableCell className="text-xs">{v.complexity || "—"}</TableCell>
-                          <TableCell className="text-xs">{v.impact || "—"}</TableCell>
-                          <TableCell className="text-xs">{v.roi_estimate || "—"}</TableCell>
-                          <TableCell className="text-xs">{v.estimated_cost || "—"}</TableCell>
-                          <TableCell className="text-xs">{v.estimated_timeline || "—"}</TableCell>
-                          <TableCell className="text-xs">{(v.tools_suggested || []).join(", ") || "—"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {detail?.detail_content && (
-                    <>
-                      <Separator className="my-3" />
-                      <DetailContentRenderer content={detail.detail_content} />
-                    </>
-                  )}
-                </CardContent>
-              )}
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Tools & Technology Summary */}
+      {/* Technology Landscape */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Wrench className="h-4 w-4" /> Technologies & Outils
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-primary" /> Écosystème Technologique
           </CardTitle>
         </CardHeader>
         <CardContent>
           {stats.toolFreq.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aucun outil suggéré</p>
+            <p className="text-sm text-muted-foreground">Aucun outil identifié dans les analyses</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {stats.toolFreq.map(([tool, count]) => (
-                <Badge key={tool} variant="secondary" className="text-xs">
-                  {tool} <span className="ml-1 opacity-60">×{count}</span>
-                </Badge>
+                <div key={tool} className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
+                  <span className="text-sm font-medium">{tool}</span>
+                  <Badge variant="secondary" className="text-[10px] h-5">×{count}</Badge>
+                </div>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Footer */}
+      <div className="text-center pt-4">
+        <p className="text-xs text-muted-foreground">
+          Rapport généré automatiquement par AutoDiscover · {format(new Date(), "dd MMMM yyyy à HH:mm", { locale: fr })}
+        </p>
+      </div>
     </div>
   );
 };
 
-// Small stat card component
-const StatCard = ({ label, value, className = "" }: { label: string; value: number; className?: string }) => (
-  <div className="bg-muted/50 rounded-lg p-3 text-center">
-    <div className={`text-xl font-bold ${className}`}>{value}</div>
-    <div className="text-[10px] text-muted-foreground">{label}</div>
+// --- Sub-components ---
+
+const KpiCard = ({ icon: Icon, label, value, accent, variant }: {
+  icon: any; label: string; value: number; accent?: boolean; variant?: "green";
+}) => (
+  <Card className={`${accent ? "border-primary/30 bg-primary/5" : variant === "green" ? "border-green-500/20 bg-green-500/5" : ""}`}>
+    <CardContent className="p-5 flex items-center gap-4">
+      <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${
+        accent ? "bg-primary/10" : variant === "green" ? "bg-green-500/10" : "bg-muted"
+      }`}>
+        <Icon className={`h-5 w-5 ${accent ? "text-primary" : variant === "green" ? "text-green-600" : "text-muted-foreground"}`} />
+      </div>
+      <div>
+        <div className={`text-2xl font-bold ${accent ? "text-primary" : variant === "green" ? "text-green-700" : ""}`}>{value}</div>
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const ProgressMetric = ({ label, value, total, percent, color }: {
+  label: string; value: number; total: number; percent: number; color: string;
+}) => (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs font-semibold">{value}/{total}</span>
+    </div>
+    <div className="h-2 bg-muted rounded-full overflow-hidden">
+      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${percent}%` }} />
+    </div>
   </div>
 );
 
-// Render detail_content JSON nicely
-const DetailContentRenderer = ({ content }: { content: any }) => {
-  if (!content || typeof content !== "object") return null;
-  const sections = Object.entries(content).filter(([, v]) => v);
-  if (sections.length === 0) return null;
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium">Détails enrichis</p>
-      {sections.map(([key, value]) => (
-        <div key={key}>
-          <p className="text-[10px] font-medium text-muted-foreground capitalize">{key.replace(/_/g, " ")}</p>
-          <p className="text-xs">{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</p>
-        </div>
-      ))}
+const MiniStat = ({ label, value, icon: Icon }: { label: string; value: number; icon: any }) => (
+  <div className="flex items-center gap-2">
+    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+    <div>
+      <div className="text-sm font-semibold">{value}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
     </div>
+  </div>
+);
+
+const ImpactBadge = ({ impact }: { impact: string }) => {
+  const config = IMPACT_CONFIG[impact || "medium"];
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${config?.bgClass} ${config?.textClass}`}>
+      {config?.label || impact}
+    </span>
+  );
+};
+
+const OpportunityCard = ({ uc, index, detailMap, pddSet, navigate }: {
+  uc: any; index: number; detailMap: Map<string, any>; pddSet: Set<string>; navigate: any;
+}) => {
+  const variants = (uc.automation_variants || []).sort((a: any, b: any) => a.variant_number - b.variant_number);
+  const recommended = variants.find((v: any) => v.recommended);
+  const detail = detailMap.get(uc.id);
+
+  return (
+    <Card className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
+      <div className="flex">
+        <div className="w-1.5 bg-green-500 shrink-0" />
+        <div className="flex-1 p-5 space-y-3">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">{uc.title}</h4>
+              <p className="text-xs text-muted-foreground line-clamp-2 max-w-xl">{uc.description}</p>
+            </div>
+            <div className="flex gap-1.5 shrink-0 ml-4">
+              <ImpactBadge impact={uc.impact} />
+              {uc.roi_estimate && (
+                <Badge variant="outline" className="text-xs font-medium">
+                  <DollarSign className="h-3 w-3 mr-0.5" />{uc.roi_estimate}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Zap className="h-3 w-3" /> {uc.uploaded_processes?.file_name || "—"}</span>
+            <span className="flex items-center gap-1"><Layers className="h-3 w-3" /> {variants.length} variante(s)</span>
+            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {format(new Date(uc.created_at), "dd MMM yyyy", { locale: fr })}</span>
+            {detailMap.has(uc.id) && <span className="flex items-center gap-1 text-primary"><Sparkles className="h-3 w-3" /> Détaillé</span>}
+            {pddSet.has(uc.id) && <span className="flex items-center gap-1 text-green-600"><FileText className="h-3 w-3" /> PDD</span>}
+          </div>
+
+          {variants.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+              {variants.map((v: any) => (
+                <div key={v.id} className={`rounded-lg border px-3 py-2 text-xs ${v.recommended ? "border-primary/30 bg-primary/5" : "bg-muted/30"}`}>
+                  <div className="font-medium flex items-center gap-1">
+                    {v.recommended && <Star className="h-3 w-3 text-amber-500" />}
+                    {v.variant_name}
+                  </div>
+                  <div className="text-muted-foreground mt-0.5">
+                    {v.complexity && <span className="capitalize">{v.complexity}</span>}
+                    {v.estimated_cost && <span> · {v.estimated_cost}</span>}
+                    {v.estimated_timeline && <span> · {v.estimated_timeline}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 };
 
