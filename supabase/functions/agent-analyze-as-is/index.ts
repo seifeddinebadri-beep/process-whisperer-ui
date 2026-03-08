@@ -245,6 +245,7 @@ serve(async (req) => {
     const { context, steps, agent_summary, confidence, gaps_identified } = JSON.parse(toolCall.function.arguments);
 
     // Delete existing data
+    await supabase.from("step_actions").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // clear all first via step cascade
     await supabase.from("process_steps").delete().eq("process_id", process_id);
     await supabase.from("process_context").delete().eq("process_id", process_id);
     await supabase.from("process_screenshots").delete().eq("process_id", process_id);
