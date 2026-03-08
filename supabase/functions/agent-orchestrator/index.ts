@@ -141,14 +141,9 @@ serve(async (req) => {
       await log(supabase, process_id, "phase_parse", "warning", `Parsing failed: ${(e as Error).message}. Continuing...`);
     }
 
-    // ===== PHASE 0b: Generate embeddings =====
-    await log(supabase, process_id, "phase_embeddings", "started", "Phase 0b/5 — Generating vector embeddings...");
-    try {
-      await callFunction("generate-embeddings", { process_id });
-      await log(supabase, process_id, "phase_embeddings", "completed", "Embeddings generated.");
-    } catch (e) {
-      await log(supabase, process_id, "phase_embeddings", "warning", `Embeddings failed: ${(e as Error).message}. Continuing...`);
-    }
+    // ===== PHASE 0b: Embeddings skipped =====
+    // Embeddings are generated during upload flow. The analyst has a fallback if none exist.
+    // Skipping here to avoid 504 timeouts from edge function time limits.
 
     // ===== PHASE 1: Analyst =====
     await log(supabase, process_id, "phase_analyst", "started", "Phase 1/5 — Analyst: extracting process steps and context...");
