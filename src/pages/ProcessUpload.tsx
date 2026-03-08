@@ -182,8 +182,9 @@ const ProcessUpload = () => {
           file_name: selectedFile.name, file_path: filePath,
           company_id: selectedCompany || null, department_id: selectedDept || null,
           entity_id: selectedEntity || null, activity_id: selectedActivity || null,
+          service_id: selectedService || null,
           notes: notes || null, status: "uploaded",
-        })
+        } as any)
         .select("id").single();
       if (insertError) throw insertError;
 
