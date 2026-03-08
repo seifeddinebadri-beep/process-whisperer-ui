@@ -35,7 +35,7 @@ const sourceConfig: Record<StepSource, { label: string; className: string }> = {
 
 export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl, onScreenshotPageClick }: StepCardProps) => {
   const [showScreenshot, setShowScreenshot] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(true);
   const imgUrl = screenshotUrl || step.screenshotUrl;
   const actions = step.actions || [];
 
