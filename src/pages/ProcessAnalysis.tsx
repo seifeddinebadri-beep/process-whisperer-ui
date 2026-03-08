@@ -749,10 +749,16 @@ const ProcessAnalysis = () => {
                       onMoveDown={(idx) => handleMoveStep(idx, 1)}
                       hideActions={stepFilterCount > 0}
                       onScreenshotPageClick={(page) => {
-                        // Scroll to screenshot gallery or open modal for that page
                         const el = document.getElementById("screenshot-gallery");
                         if (el) el.scrollIntoView({ behavior: "smooth" });
                       }}
+                      onUpdateAction={(action) => updateActionMutation.mutate(action)}
+                      onDeleteAction={(actionId) => deleteActionMutation.mutate(actionId)}
+                      onAddAction={(stepId) => addActionMutation.mutate(stepId)}
+                      onUploadStepScreenshot={handleUploadStepScreenshot}
+                      onDeleteStepScreenshot={handleDeleteStepScreenshot}
+                      onUploadActionScreenshot={handleUploadActionScreenshot}
+                      onDeleteActionScreenshot={handleDeleteActionScreenshot}
                     />
                   ))
                 )}
