@@ -1,4 +1,4 @@
-import { LayoutDashboard, Building2, Upload, GitBranch, Lightbulb, Globe } from "lucide-react";
+import { LayoutDashboard, Building2, Upload, GitBranch, Lightbulb, Globe, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useLang } from "@/lib/i18n";
