@@ -56,42 +56,22 @@ serve(async (req) => {
     }
 
     // ===== Concurrency guard =====
-    // First, mark stale "started" entries older than 10 min as timed out
-    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const { data: staleRuns } = await supabase
+    // Mark stale "started" entries older than 2 min as timed out (edge functions timeout at ~60s)
+    const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    
+    // Get ALL "started" orchestrate entries for this process
+    const { data: allStarted } = await supabase
       .from("agent_logs")
       .select("id, created_at")
       .eq("process_id", process_id)
       .eq("agent_name", "orchestrator")
       .eq("action", "orchestrate")
       .eq("status", "started")
-      .lt("created_at", tenMinAgo);
+      .order("created_at", { ascending: false });
 
-    if (staleRuns && staleRuns.length > 0) {
-      for (const stale of staleRuns) {
-        await supabase.from("agent_logs").insert({
-          process_id,
-          agent_name: "orchestrator",
-          action: "orchestrate",
-          status: "error",
-          message: "Marked as timed out (stale started entry older than 10 min).",
-        });
-      }
-    }
-
-    // Now check for genuinely active runs (started in last 10 min with no end)
-    const { data: activeRuns } = await supabase
-      .from("agent_logs")
-      .select("id, created_at")
-      .eq("process_id", process_id)
-      .eq("agent_name", "orchestrator")
-      .eq("action", "orchestrate")
-      .eq("status", "started")
-      .gte("created_at", tenMinAgo)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (activeRuns && activeRuns.length > 0) {
+    // For each started entry, check if it has a matching end entry
+    let hasActiveRun = false;
+    for (const run of (allStarted || [])) {
       const { data: endEntries } = await supabase
         .from("agent_logs")
         .select("id")
@@ -99,14 +79,31 @@ serve(async (req) => {
         .eq("agent_name", "orchestrator")
         .eq("action", "orchestrate")
         .in("status", ["completed", "error"])
-        .gte("created_at", activeRuns[0].created_at)
+        .gte("created_at", run.created_at)
         .limit(1);
 
       if (!endEntries || endEntries.length === 0) {
-        return new Response(JSON.stringify({ error: "Pipeline already running for this process. Please wait for it to finish." }), {
-          status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        // This run has no completion — is it stale or active?
+        if (run.created_at < twoMinAgo) {
+          // Stale: mark as timed out
+          await supabase.from("agent_logs").insert({
+            process_id,
+            agent_name: "orchestrator",
+            action: "orchestrate",
+            status: "error",
+            message: `Marked as timed out (stale run from ${run.created_at}).`,
+          });
+        } else {
+          // Genuinely active (started < 2 min ago)
+          hasActiveRun = true;
+        }
       }
+    }
+
+    if (hasActiveRun) {
+      return new Response(JSON.stringify({ error: "Pipeline already running for this process. Please wait for it to finish." }), {
+        status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     await log(supabase, process_id, "orchestrate", "started", "Orchestrator started — launching full analysis pipeline...");
