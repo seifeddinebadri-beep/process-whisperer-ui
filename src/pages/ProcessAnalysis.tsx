@@ -35,6 +35,10 @@ const ProcessAnalysis = () => {
   const navigate = useNavigate();
   const [selectedProcessId, setSelectedProcessId] = useState("");
 
+  const stepDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
   // Fetch processes with status analyzed or approved
   const { data: processes = [], isLoading: loadingProcesses } = useQuery({
     queryKey: ["analysis-processes"],
