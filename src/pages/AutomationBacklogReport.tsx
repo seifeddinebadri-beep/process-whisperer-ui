@@ -124,7 +124,7 @@ const AutomationBacklogReport = () => {
     const processSet = new Set<string>();
     const toolFreq: Record<string, number> = {};
 
-    useCases.forEach((uc: any) => {
+    filtered.forEach((uc: any) => {
       byImpact[uc.impact || "medium"] = (byImpact[uc.impact || "medium"] || 0) + 1;
       byComplexity[uc.complexity || "unknown"] = (byComplexity[uc.complexity || "unknown"] || 0) + 1;
       totalVariants += uc.automation_variants?.length || 0;
@@ -139,19 +139,22 @@ const AutomationBacklogReport = () => {
       });
     });
 
+    const filteredDetailCount = filtered.filter((uc: any) => detailMap.has(uc.id)).length;
+    const filteredPddCount = filtered.filter((uc: any) => pddSet.has(uc.id)).length;
+
     return {
-      total: useCases.length,
+      total: filtered.length,
       byImpact,
       byComplexity,
       totalVariants,
       processCount: processSet.size,
-      detailedCount: details.length,
-      pddCount: pdds.length,
+      detailedCount: filteredDetailCount,
+      pddCount: filteredPddCount,
       toolFreq: Object.entries(toolFreq).sort(([, a], [, b]) => b - a),
-      readinessPercent: useCases.length > 0 ? Math.round((details.length / useCases.length) * 100) : 0,
-      pddPercent: useCases.length > 0 ? Math.round((pdds.length / useCases.length) * 100) : 0,
+      readinessPercent: filtered.length > 0 ? Math.round((filteredDetailCount / filtered.length) * 100) : 0,
+      pddPercent: filtered.length > 0 ? Math.round((filteredPddCount / filtered.length) * 100) : 0,
     };
-  }, [useCases, details, pdds]);
+  }, [filtered, detailMap, pddSet]);
 
   const impactChartData = useMemo(() =>
     Object.entries(stats.byImpact)
