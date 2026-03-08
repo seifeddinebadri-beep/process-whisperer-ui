@@ -198,7 +198,7 @@ const ProcessUpload = () => {
 
       try {
         const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke("agent-analyze-as-is", {
-          body: { process_id: process.id },
+          body: { process_id: process.id, pdf_path: pdfPath },
         });
         if (analyzeError) {
           updateLastEntry({ status: "error", message: "Agent Analyst encountered an error." });
