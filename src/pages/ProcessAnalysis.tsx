@@ -663,6 +663,25 @@ const ProcessAnalysis = () => {
                     />
                   ))
                 )}
+                {/* Extract actions banner */}
+                {hasStepsButNoActions && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-primary/30 bg-primary/5">
+                    <Zap className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{lang === "fr" ? "Actions détaillées non extraites" : "Detailed actions not extracted"}</p>
+                      <p className="text-xs text-muted-foreground">{lang === "fr" ? "Enrichissez chaque étape avec les actions granulaires du document source." : "Enrich each step with granular actions from the source document."}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => extractActionsMutation.mutate()}
+                      disabled={extractingActions}
+                    >
+                      {extractingActions ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
+                      {lang === "fr" ? "Extraire les actions" : "Extract actions"}
+                    </Button>
+                  </div>
+                )}
+
                 <Button variant="outline" className="w-full" onClick={() => setIsAdding(true)}>
                   <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
                 </Button>
