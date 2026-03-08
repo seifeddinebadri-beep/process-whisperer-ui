@@ -482,6 +482,10 @@ export const translations = {
       stepRemoved: "Step removed",
       processApproved: "Process approved!",
       discoveryAvailable: "Automation discovery is now available.",
+      screenshots: "Screenshots",
+      noScreenshots: "No screenshots available for this process.",
+      viewScreenshot: "View screenshot",
+      page: "Page",
     },
 
     stepModal: {
