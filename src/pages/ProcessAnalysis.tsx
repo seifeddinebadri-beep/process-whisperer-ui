@@ -766,30 +766,35 @@ const ProcessAnalysis = () => {
                 {filteredSteps.length === 0 && displaySteps.length > 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-6">Aucune étape ne correspond aux filtres</p>
                 ) : (
-                  filteredSteps.map((step, i) => (
-                    <StepCard
-                      key={step.id}
-                      step={step}
-                      index={i}
-                      total={filteredSteps.length}
-                      onEdit={setEditingStep}
-                      onDelete={handleDeleteStep}
-                      onMoveUp={(idx) => handleMoveStep(idx, -1)}
-                      onMoveDown={(idx) => handleMoveStep(idx, 1)}
-                      hideActions={stepFilterCount > 0}
-                      onScreenshotPageClick={(page) => {
-                        const el = document.getElementById("screenshot-gallery");
-                        if (el) el.scrollIntoView({ behavior: "smooth" });
-                      }}
-                      onUpdateAction={(action) => updateActionMutation.mutate(action)}
-                      onDeleteAction={(actionId) => deleteActionMutation.mutate(actionId)}
-                      onAddAction={(stepId) => addActionMutation.mutate(stepId)}
-                      onUploadStepScreenshot={handleUploadStepScreenshot}
-                      onDeleteStepScreenshot={handleDeleteStepScreenshot}
-                      onUploadActionScreenshot={handleUploadActionScreenshot}
-                      onDeleteActionScreenshot={handleDeleteActionScreenshot}
-                    />
-                  ))
+                  <DndContext sensors={stepDndSensors} collisionDetection={closestCenter} onDragEnd={handleStepDragEnd}>
+                    <SortableContext items={filteredSteps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                      {filteredSteps.map((step, i) => (
+                        <StepCard
+                          key={step.id}
+                          step={step}
+                          index={i}
+                          total={filteredSteps.length}
+                          onEdit={setEditingStep}
+                          onDelete={handleDeleteStep}
+                          onMoveUp={() => {}}
+                          onMoveDown={() => {}}
+                          hideActions={stepFilterCount > 0}
+                          onScreenshotPageClick={(page) => {
+                            const el = document.getElementById("screenshot-gallery");
+                            if (el) el.scrollIntoView({ behavior: "smooth" });
+                          }}
+                          onUpdateAction={(action) => updateActionMutation.mutate(action)}
+                          onDeleteAction={(actionId) => deleteActionMutation.mutate(actionId)}
+                          onAddAction={(stepId) => addActionMutation.mutate(stepId)}
+                          onUploadStepScreenshot={handleUploadStepScreenshot}
+                          onDeleteStepScreenshot={handleDeleteStepScreenshot}
+                          onUploadActionScreenshot={handleUploadActionScreenshot}
+                          onDeleteActionScreenshot={handleDeleteActionScreenshot}
+                          onReorderActions={handleReorderActions}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
                 {/* Extract actions banner */}
                 {hasStepsButNoActions && (
