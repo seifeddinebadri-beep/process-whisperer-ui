@@ -39,6 +39,13 @@ const AutomationBacklogReport = () => {
   const navigate = useNavigate();
   const reportRef = useRef<HTMLDivElement>(null);
 
+  // Filters
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterImpact, setFilterImpact] = useState("all");
+  const [filterComplexity, setFilterComplexity] = useState("all");
+  const [filterProcess, setFilterProcess] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+
   const { data: useCases = [], isLoading: loadingUC } = useQuery({
     queryKey: ["report-use-cases"],
     queryFn: async () => {
