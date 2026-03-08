@@ -1,97 +1,42 @@
 
 
-## Plan: Rename KB hierarchy, add delete, add document upload
+## Plan: Make the full pipeline work end-to-end
 
-### 1. Rename hierarchy labels (i18n only, no DB changes)
+### Problems identified
 
-Update `src/lib/i18n.tsx` — the KB section labels:
-- "Companies" stays as top level (unchanged)
-- Current "Departments" → **"Départements"** (stays same in FR, already correct)
-- Current "Entities" → **"Entités"** (stays same)  
-- Current "Activities" → **"Activités"** (stays same)
+1. **Concurrency guard is ineffective** — The logs show 6+ orchestrator "started" entries with no matching "completed" for the same process. The guard only checks the latest "started" but old stale entries from timed-out runs pollute the check.
 
-Wait — re-reading the user request: "Department -> Entity -> Activity -> Service". This means the hierarchy levels should be renamed:
-- Level 1 (was "Department") → **"Département"** (no change)
-- Level 2 (was "Entity") → **"Entité"** (no change)  
-- Level 3 (was "Activity") → **"Activité"** (no change)
-- Level 4 → **"Service"** (NEW level, or rename Activity to Service?)
+2. **Embeddings cause 504 timeouts** — `generate-embeddings` calls the AI gateway per chunk with 1s delays. Edge functions timeout at ~60s. With 4 chunks this takes 30-40s of AI calls + delays, often exceeding the limit. Since the analyst now has a fallback (no chunks needed), embeddings should be made optional and non-blocking.
 
-Actually, the user says "rename it": the current hierarchy under a company is Department > Entity > Activity. The user wants it labeled as **Department > Entity > Activity > Service**. This adds a new level "Service" under Activity, OR renames the existing levels.
+3. **`step_actions` global delete bug** — In `agent-analyze-as-is` line 439: `delete().neq("id", "00000000-...")` deletes ALL step_actions across ALL processes, not just the current one.
 
-Given the DB structure (departments → entities → activities), the simplest interpretation is renaming the labels:
-- What was "Department" → **"Département"** (same)
-- What was "Entity" → **"Entité"** (same)  
-- What was "Activity" → **"Activité"** (same)
+4. **`ba_messages` missing DELETE RLS** — Cleanup in `analyze-process` silently fails when deleting ba_messages.
 
-But that's 3 levels, and the user listed 4. I think the user wants to rename the 3 existing sub-levels under Company:
-- "Departments" → **"Department"** 
-- "Entities" → **"Entity"**
-- "Activities" → **"Activity"**
-
-And add a 4th level: **"Service"** under Activity.
-
-OR the user wants to rename the 3 levels as: Department, Entity, Activity, Service — meaning rename what was "Activity" to "Service" and add "Activity" as a middle level. That would require a new DB table.
-
-**Simplest interpretation**: Rename the 3 existing levels to match the user's naming, and the last one "Service" replaces "Activity" label. So:
-- Level 1: Department (same)
-- Level 2: Entity (same)  
-- Level 3: Activity (same — currently "Entity" in DB)
-- Level 4: Service (currently "Activity" in DB, renamed to "Service")
-
-Actually, I think the user just wants the labels to be exactly: **Department → Entity → Activity → Service**. Since there are currently only 3 levels under Company (Department, Entity, Activity), this means adding a **4th level: Service** under Activity. This requires a new DB table `services`.
-
-Let me go with the most practical interpretation: **add a new "Service" level under Activity**, requiring a new `services` table.
+5. **Upload flow duplicates orchestrator work** — Upload already runs parse → embeddings → analyze. The orchestrator re-runs all of these. This is wasteful and confusing.
 
 ### Changes
 
-**A. Database migration — create `services` table**
-```sql
-CREATE TABLE public.services (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  activity_id uuid NOT NULL REFERENCES public.activities(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  description text,
-  business_objective text,
-  documentation text[]
-);
-ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
--- RLS policies (public access like other KB tables)
-CREATE POLICY "Allow public read services" ON public.services FOR SELECT USING (true);
-CREATE POLICY "Allow public insert services" ON public.services FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public delete services" ON public.services FOR DELETE USING (true);
-CREATE POLICY "Allow public update services" ON public.services FOR UPDATE USING (true);
-```
+**A. Fix concurrency guard in `agent-orchestrator`**
+- Before starting, clean up stale "started" entries older than 10 minutes that have no matching end entry — mark them as "error" (timeout)
+- Then check if there's a genuinely active run
 
-Also create a `kb_documents` table for uploaded documents at any level:
-```sql
-CREATE TABLE public.kb_documents (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  file_name text NOT NULL,
-  file_path text NOT NULL,
-  entity_type text NOT NULL, -- 'company','department','entity','activity','service'
-  entity_id uuid NOT NULL,
-  uploaded_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.kb_documents ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read kb_documents" ON public.kb_documents FOR SELECT USING (true);
-CREATE POLICY "Allow public insert kb_documents" ON public.kb_documents FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public delete kb_documents" ON public.kb_documents FOR DELETE USING (true);
-```
+**B. Make embeddings non-blocking in orchestrator**
+- Skip the embeddings phase entirely in the orchestrator since `agent-analyze-as-is` already has the fallback to work without chunks/embeddings
+- The upload flow already generates embeddings; no need to redo in orchestrator
+- This eliminates the most common 504 failure
 
-**B. Update `src/lib/i18n.tsx`**
-- Add new KB translations for Service level: `services`, `addService`, `serviceName`, `serviceAdded`, `addNewService`, `serviceDetails`
-- Add delete-related translations: `confirmDelete`, `deleted`
-- Add document upload translations: `uploadDocument`, `documentUploaded`
+**C. Fix `step_actions` scoped delete in `agent-analyze-as-is`**
+- Replace the global delete with a scoped delete: get step IDs for the current process, then delete step_actions only for those steps
 
-**C. Update `src/pages/KnowledgeBase.tsx`**
-1. **Add Service level**: New view "services", queries, mutations, navigation, cards — following the same pattern as activities
-2. **Add delete buttons** on each card (company, department, entity, activity, service) with confirmation dialog. Each delete calls `supabase.from("tableName").delete().eq("id", id)` and invalidates queries.
-3. **Add document upload**: A file input + upload button on each level's view. Files uploaded to the `process-files` bucket under a path like `kb/{entity_type}/{entity_id}/{filename}`. Record saved in `kb_documents` table. Display uploaded documents as badges with delete option.
+**D. Add DELETE RLS policy for `ba_messages`**
+- Database migration to allow deleting ba_messages
 
-**D. Update Activity view**: Currently clicking an Activity opens a detail Sheet. Now clicking an Activity navigates to the Services list (new level). The detail sheet moves to Service level.
+**E. Orchestrator: skip phases already done during upload**
+- Check if process already has steps (from upload's analyze call) and skip the parse/analyst phases if data exists
+- Or: always re-run (current behavior) but with the fixes above it won't break
 
-### File changes summary
-- **Migration**: 1 new migration (services table + kb_documents table)
-- `src/lib/i18n.tsx`: Add service + delete + upload translations
-- `src/pages/KnowledgeBase.tsx`: Add services level, delete buttons on all levels, document upload UI
+### Files to edit
+1. `supabase/functions/agent-orchestrator/index.ts` — fix guard, skip embeddings
+2. `supabase/functions/agent-analyze-as-is/index.ts` — fix step_actions scoped delete
+3. Database migration — ba_messages DELETE policy
 
