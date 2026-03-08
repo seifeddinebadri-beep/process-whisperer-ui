@@ -435,8 +435,15 @@ serve(async (req) => {
 
     const { context, steps, agent_summary, confidence, gaps_identified } = JSON.parse(toolCall.function.arguments);
 
-    // Delete existing data
-    await supabase.from("step_actions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    // Delete existing data — scoped to this process only
+    const { data: existingSteps } = await supabase
+      .from("process_steps")
+      .select("id")
+      .eq("process_id", process_id);
+    const stepIds = existingSteps?.map((s: any) => s.id) || [];
+    if (stepIds.length > 0) {
+      await supabase.from("step_actions").delete().in("step_id", stepIds);
+    }
     await supabase.from("process_steps").delete().eq("process_id", process_id);
     await supabase.from("process_context").delete().eq("process_id", process_id);
     await supabase.from("process_screenshots").delete().eq("process_id", process_id);
