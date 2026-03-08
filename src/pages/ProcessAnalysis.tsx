@@ -25,6 +25,7 @@ import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
 import { AgentMessage } from "@/components/agents/AgentMessage";
 import type { AgentLogEntry } from "@/components/agents/AgentActivityLog";
+import { Zap } from "lucide-react";
 
 const ProcessAnalysis = () => {
   const { t, lang } = useLang();
