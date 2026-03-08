@@ -109,6 +109,33 @@ const ProcessAnalysis = () => {
     enabled: !!selectedProcessId,
   });
 
+  // Fetch screenshots for selected process
+  const { data: screenshots = [] } = useQuery({
+    queryKey: ["process-screenshots", selectedProcessId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("process_screenshots")
+        .select("*")
+        .eq("process_id", selectedProcessId)
+        .order("page_number");
+      if (error) throw error;
+      return data.map((s: any): ProcessScreenshot => ({
+        id: s.id,
+        processId: s.process_id,
+        filePath: s.file_path,
+        pageNumber: s.page_number,
+        caption: s.caption,
+        createdAt: s.created_at,
+      }));
+    },
+    enabled: !!selectedProcessId,
+  });
+
+  const getPublicUrl = (path: string) => {
+    const { data } = supabase.storage.from("process-files").getPublicUrl(path);
+    return data.publicUrl;
+  };
+
   // Always use real DB data
   const displaySteps = steps;
   const displayContext = context || { processObjective: "", knownConstraints: "", assumptions: "", painPointsSummary: "", volumeAndFrequency: "", stakeholderNotes: "" };
