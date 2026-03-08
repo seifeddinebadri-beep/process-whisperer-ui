@@ -20,6 +20,14 @@ export interface ProcessStep {
   screenshotUrl?: string;
 }
 
+export interface StepAction {
+  id: string;
+  description: string;
+  systemUsed?: string;
+  screenshotPage?: number;
+  actionOrder?: number;
+}
+
 export interface ProcessScreenshot {
   id: string;
   processId: string;
