@@ -5,7 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Edit2, Trash2, ChevronUp, ChevronDown, ImageIcon, ChevronRight, Monitor, Plus, Upload, X } from "lucide-react";
+import { Edit2, Trash2, ImageIcon, ChevronRight, Monitor, Plus, Upload, X, GripVertical } from "lucide-react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import type { DragEndEvent } from "@dnd-kit/core";
 import type { ProcessStep, StepSource, StepAction } from "./types";
 
 interface StepCardProps {
@@ -26,6 +31,7 @@ interface StepCardProps {
   onDeleteStepScreenshot?: (stepId: string) => void;
   onUploadActionScreenshot?: (actionId: string, file: File) => void;
   onDeleteActionScreenshot?: (actionId: string) => void;
+  onReorderActions?: (stepId: string, actionIds: string[]) => void;
 }
 
 const decisionLabels: Record<string, string> = {
@@ -44,7 +50,8 @@ const sourceConfig: Record<StepSource, { label: string; className: string }> = {
 export const StepCard = ({
   step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl,
   onScreenshotPageClick, onUpdateAction, onDeleteAction, onAddAction,
-  onUploadStepScreenshot, onDeleteStepScreenshot, onUploadActionScreenshot, onDeleteActionScreenshot
+  onUploadStepScreenshot, onDeleteStepScreenshot, onUploadActionScreenshot, onDeleteActionScreenshot,
+  onReorderActions
 }: StepCardProps) => {
   const [showScreenshot, setShowScreenshot] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(true);
@@ -52,165 +59,195 @@ export const StepCard = ({
   const imgUrl = screenshotUrl || step.screenshotUrl;
   const actions = step.actions || [];
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  const actionSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const handleActionDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = actions.findIndex(a => a.id === active.id);
+    const newIdx = actions.findIndex(a => a.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(actions, oldIdx, newIdx);
+    onReorderActions?.(step.id, reordered.map(a => a.id));
+  };
+
   return (
     <>
-      <Card className="border-l-4 border-l-primary/30">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              <span className="font-mono text-xs text-muted-foreground mt-1 w-6 shrink-0">{index + 1}.</span>
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-sm">{step.name}</div>
-                  {actions.length > 0 && (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                      {actions.length} action{actions.length > 1 ? "s" : ""}
-                    </Badge>
-                  )}
-                  {imgUrl && (
-                    <button
-                      onClick={() => setShowScreenshot(true)}
-                      className="flex items-center gap-1 text-[10px] text-primary hover:underline"
-                    >
-                      <ImageIcon className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground">{step.description}</div>
-
-                {/* Step screenshot with upload/delete */}
-                <div className="flex items-center gap-2 mt-1">
-                  {imgUrl && (
-                    <div className="relative group">
-                      <div
-                        className="cursor-pointer rounded overflow-hidden border w-24 h-16 bg-muted/30 hover:ring-2 hover:ring-primary/40 transition-all"
+      <div ref={setNodeRef} style={style}>
+        <Card className="border-l-4 border-l-primary/30">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-1 flex-1 min-w-0">
+                {/* Drag handle for step */}
+                <button
+                  {...attributes}
+                  {...listeners}
+                  className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 touch-none"
+                >
+                  <GripVertical className="h-4 w-4" />
+                </button>
+                <span className="font-mono text-xs text-muted-foreground mt-1 w-6 shrink-0">{index + 1}.</span>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium text-sm">{step.name}</div>
+                    {actions.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                        {actions.length} action{actions.length > 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                    {imgUrl && (
+                      <button
                         onClick={() => setShowScreenshot(true)}
+                        className="flex items-center gap-1 text-[10px] text-primary hover:underline"
                       >
-                        <img src={imgUrl} alt="Screenshot" className="w-full h-full object-cover" loading="lazy" />
-                      </div>
-                      {onDeleteStepScreenshot && (
-                        <button
-                          onClick={() => onDeleteStepScreenshot(step.id)}
-                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {onUploadStepScreenshot && (
-                    <>
-                      <input
-                        ref={stepFileRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) onUploadStepScreenshot(step.id, f);
-                          e.target.value = "";
-                        }}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-primary"
-                        onClick={() => stepFileRef.current?.click()}
-                        title="Upload screenshot"
-                      >
-                        <Upload className="h-3.5 w-3.5" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {step.source && step.source !== "manual" && sourceConfig[step.source as StepSource] && (
-                    <Badge className={`text-[10px] border-0 ${sourceConfig[step.source as StepSource].className}`}>
-                      {sourceConfig[step.source as StepSource].label}
-                    </Badge>
-                  )}
-                  {step.role && <Badge variant="secondary" className="text-[10px]">{step.role}</Badge>}
-                  {step.toolUsed && <Badge variant="outline" className="text-[10px]">{step.toolUsed}</Badge>}
-                  {step.decisionType && (
-                    <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
-                      {decisionLabels[step.decisionType]}
-                    </Badge>
-                  )}
-                  {step.frequency && <Badge variant="outline" className="text-[10px]">{step.frequency}</Badge>}
-                </div>
-                {step.painPoints && (
-                  <p className="text-[11px] text-destructive/80 mt-1">⚠ {step.painPoints}</p>
-                )}
-                {step.businessRules && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">📋 {step.businessRules}</p>
-                )}
-
-                {/* Collapsible Actions */}
-                {actions.length > 0 && (
-                  <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
-                    <CollapsibleTrigger asChild>
-                      <button className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md bg-primary/5 hover:bg-primary/10 border border-primary/15 transition-colors">
-                        <ChevronRight className={`h-3 w-3 text-primary transition-transform ${actionsOpen ? "rotate-90" : ""}`} />
-                        <span className="text-[11px] font-semibold text-primary">{actions.length}</span>
-                        <span className="text-[11px] font-medium text-foreground/80">action{actions.length > 1 ? "s" : ""}</span>
+                        <ImageIcon className="h-3 w-3" />
                       </button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="mt-2 ml-1 space-y-1.5 border-l-2 border-primary/20 pl-3 py-1.5 bg-muted/30 rounded-r-md">
-                        {actions.map((action, aIdx) => (
-                          <ActionItem
-                            key={action.id || aIdx}
-                            action={action}
-                            index={aIdx}
-                            onScreenshotPageClick={onScreenshotPageClick}
-                            onUpdate={onUpdateAction}
-                            onDelete={onDeleteAction}
-                            onUploadScreenshot={onUploadActionScreenshot}
-                            onDeleteScreenshot={onDeleteActionScreenshot}
-                          />
-                        ))}
-                        {onAddAction && (
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{step.description}</div>
+
+                  {/* Step screenshot with upload/delete */}
+                  <div className="flex items-center gap-2 mt-1">
+                    {imgUrl && (
+                      <div className="relative group">
+                        <div
+                          className="cursor-pointer rounded overflow-hidden border w-24 h-16 bg-muted/30 hover:ring-2 hover:ring-primary/40 transition-all"
+                          onClick={() => setShowScreenshot(true)}
+                        >
+                          <img src={imgUrl} alt="Screenshot" className="w-full h-full object-cover" loading="lazy" />
+                        </div>
+                        {onDeleteStepScreenshot && (
                           <button
-                            onClick={() => onAddAction(step.id)}
-                            className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-1 ml-4"
+                            onClick={() => onDeleteStepScreenshot(step.id)}
+                            className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                           >
-                            <Plus className="h-3 w-3" /> Ajouter une action
+                            <X className="h-3 w-3" />
                           </button>
                         )}
                       </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
-                {actions.length === 0 && onAddAction && (
-                  <button
-                    onClick={() => onAddAction(step.id)}
-                    className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-2"
-                  >
-                    <Plus className="h-3 w-3" /> Ajouter une action
-                  </button>
-                )}
+                    )}
+                    {onUploadStepScreenshot && (
+                      <>
+                        <input
+                          ref={stepFileRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) onUploadStepScreenshot(step.id, f);
+                            e.target.value = "";
+                          }}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-primary"
+                          onClick={() => stepFileRef.current?.click()}
+                          title="Upload screenshot"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {step.source && step.source !== "manual" && sourceConfig[step.source as StepSource] && (
+                      <Badge className={`text-[10px] border-0 ${sourceConfig[step.source as StepSource].className}`}>
+                        {sourceConfig[step.source as StepSource].label}
+                      </Badge>
+                    )}
+                    {step.role && <Badge variant="secondary" className="text-[10px]">{step.role}</Badge>}
+                    {step.toolUsed && <Badge variant="outline" className="text-[10px]">{step.toolUsed}</Badge>}
+                    {step.decisionType && (
+                      <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                        {decisionLabels[step.decisionType]}
+                      </Badge>
+                    )}
+                    {step.frequency && <Badge variant="outline" className="text-[10px]">{step.frequency}</Badge>}
+                  </div>
+                  {step.painPoints && (
+                    <p className="text-[11px] text-destructive/80 mt-1">⚠ {step.painPoints}</p>
+                  )}
+                  {step.businessRules && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">📋 {step.businessRules}</p>
+                  )}
+
+                  {/* Collapsible Actions with DnD */}
+                  {actions.length > 0 && (
+                    <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
+                      <CollapsibleTrigger asChild>
+                        <button className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md bg-primary/5 hover:bg-primary/10 border border-primary/15 transition-colors">
+                          <ChevronRight className={`h-3 w-3 text-primary transition-transform ${actionsOpen ? "rotate-90" : ""}`} />
+                          <span className="text-[11px] font-semibold text-primary">{actions.length}</span>
+                          <span className="text-[11px] font-medium text-foreground/80">action{actions.length > 1 ? "s" : ""}</span>
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="mt-2 ml-1 space-y-1.5 border-l-2 border-primary/20 pl-3 py-1.5 bg-muted/30 rounded-r-md">
+                          <DndContext sensors={actionSensors} collisionDetection={closestCenter} onDragEnd={handleActionDragEnd}>
+                            <SortableContext items={actions.map(a => a.id)} strategy={verticalListSortingStrategy}>
+                              {actions.map((action, aIdx) => (
+                                <SortableActionItem
+                                  key={action.id || aIdx}
+                                  action={action}
+                                  index={aIdx}
+                                  onScreenshotPageClick={onScreenshotPageClick}
+                                  onUpdate={onUpdateAction}
+                                  onDelete={onDeleteAction}
+                                  onUploadScreenshot={onUploadActionScreenshot}
+                                  onDeleteScreenshot={onDeleteActionScreenshot}
+                                />
+                              ))}
+                            </SortableContext>
+                          </DndContext>
+                          {onAddAction && (
+                            <button
+                              onClick={() => onAddAction(step.id)}
+                              className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-1 ml-4"
+                            >
+                              <Plus className="h-3 w-3" /> Ajouter une action
+                            </button>
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+                  {actions.length === 0 && onAddAction && (
+                    <button
+                      onClick={() => onAddAction(step.id)}
+                      className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-2"
+                    >
+                      <Plus className="h-3 w-3" /> Ajouter une action
+                    </button>
+                  )}
+                </div>
               </div>
+              {!hideActions && (
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(step)}>
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(step.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
             </div>
-            {!hideActions && (
-              <div className="flex flex-col gap-0.5 shrink-0">
-                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => onMoveUp(index)}>
-                  <ChevronUp className="h-3.5 w-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === total - 1} onClick={() => onMoveDown(index)}>
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(step)}>
-                  <Edit2 className="h-3.5 w-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(step.id)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Full-size screenshot modal */}
       <Dialog open={showScreenshot} onOpenChange={setShowScreenshot}>
@@ -222,8 +259,31 @@ export const StepCard = ({
   );
 };
 
+const SortableActionItem = (props: {
+  action: StepAction;
+  index: number;
+  onScreenshotPageClick?: (page: number) => void;
+  onUpdate?: (action: StepAction) => void;
+  onDelete?: (actionId: string) => void;
+  onUploadScreenshot?: (actionId: string, file: File) => void;
+  onDeleteScreenshot?: (actionId: string) => void;
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.action.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <ActionItem {...props} dragHandleProps={{ ...attributes, ...listeners }} />
+    </div>
+  );
+};
+
 const ActionItem = ({
-  action, index, onScreenshotPageClick, onUpdate, onDelete, onUploadScreenshot, onDeleteScreenshot
+  action, index, onScreenshotPageClick, onUpdate, onDelete, onUploadScreenshot, onDeleteScreenshot, dragHandleProps
 }: {
   action: StepAction;
   index: number;
@@ -232,6 +292,7 @@ const ActionItem = ({
   onDelete?: (actionId: string) => void;
   onUploadScreenshot?: (actionId: string, file: File) => void;
   onDeleteScreenshot?: (actionId: string) => void;
+  dragHandleProps?: Record<string, any>;
 }) => {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(action.description);
@@ -247,7 +308,15 @@ const ActionItem = ({
 
   return (
     <>
-      <div className="flex items-start gap-2 text-[11px] group">
+      <div className="flex items-start gap-1 text-[11px] group">
+        {dragHandleProps && (
+          <button
+            {...dragHandleProps}
+            className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground shrink-0 touch-none"
+          >
+            <GripVertical className="h-3 w-3" />
+          </button>
+        )}
         <span className="font-mono text-muted-foreground mt-0.5 w-4 shrink-0">{index + 1}.</span>
         <div className="flex-1 min-w-0">
           {editing ? (
@@ -283,7 +352,6 @@ const ActionItem = ({
                 p.{action.screenshotPage}
               </button>
             )}
-            {/* Action screenshot thumbnail */}
             {action.screenshotUrl && (
               <div className="relative group/img">
                 <div
@@ -302,7 +370,6 @@ const ActionItem = ({
                 )}
               </div>
             )}
-            {/* Upload action screenshot */}
             {onUploadScreenshot && (
               <>
                 <input
@@ -327,7 +394,6 @@ const ActionItem = ({
             )}
           </div>
         </div>
-        {/* Delete action button */}
         {onDelete && (
           <button
             onClick={() => onDelete(action.id)}
@@ -338,7 +404,6 @@ const ActionItem = ({
           </button>
         )}
       </div>
-      {/* Action screenshot modal */}
       <Dialog open={showImg} onOpenChange={setShowImg}>
         <DialogContent className="max-w-3xl p-2">
           {action.screenshotUrl && <img src={action.screenshotUrl} alt="" className="w-full rounded-lg" />}
