@@ -18,6 +18,7 @@ const ProcessUpload = () => {
   const { t } = useLang();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -26,6 +27,7 @@ const ProcessUpload = () => {
   const [selectedEntity, setSelectedEntity] = useState("");
   const [selectedActivity, setSelectedActivity] = useState("");
   const [notes, setNotes] = useState("");
+  const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [agentEntries, setAgentEntries] = useState<AgentLogEntry[]>([]);
 
@@ -151,6 +153,14 @@ const ProcessUpload = () => {
       const { error: storageError } = await supabase.storage.from("process-files").upload(filePath, selectedFile);
       if (storageError) throw storageError;
 
+      // Upload PDF if attached
+      let pdfPath: string | null = null;
+      if (selectedPdf) {
+        pdfPath = `${crypto.randomUUID()}/screenshots/${selectedPdf.name}`;
+        const { error: pdfError } = await supabase.storage.from("process-files").upload(pdfPath, selectedPdf);
+        if (pdfError) throw pdfError;
+      }
+
       updateLastEntry({ status: "done", message: "File uploaded successfully." });
       addAgentEntry({ agent: "analyst", status: "working", message: "Creating process record..." });
 
@@ -188,7 +198,7 @@ const ProcessUpload = () => {
 
       try {
         const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke("agent-analyze-as-is", {
-          body: { process_id: process.id },
+          body: { process_id: process.id, pdf_path: pdfPath },
         });
         if (analyzeError) {
           updateLastEntry({ status: "error", message: "Agent Analyst encountered an error." });
@@ -213,7 +223,7 @@ const ProcessUpload = () => {
       queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
       queryClient.invalidateQueries({ queryKey: ["overview-processes"] });
       setSelectedFile(null); setSelectedCompany(""); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity("");
-      setNotes(""); setUploading(false);
+      setNotes(""); setSelectedPdf(null); setUploading(false);
     },
     onError: (error) => {
       console.error("Upload error:", error);
@@ -267,6 +277,33 @@ const ProcessUpload = () => {
               {selectedFile ? selectedFile.name : t.upload.dropHere}
             </p>
             <p className="text-xs text-muted-foreground mt-1">CSV, TXT, JSON</p>
+          </div>
+
+          {/* PDF Attachment */}
+          <input
+            type="file"
+            ref={pdfInputRef}
+            className="hidden"
+            accept=".pdf"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setSelectedPdf(file);
+                toast({ title: t.upload.pdfAttached, description: file.name });
+              }
+            }}
+          />
+          <div
+            onClick={() => pdfInputRef.current?.click()}
+            className={`mt-3 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              selectedPdf ? "border-primary/50 bg-primary/5" : "border-border hover:border-primary/30"
+            }`}
+          >
+            <FileUp className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+            <p className="text-xs font-medium text-foreground">
+              {selectedPdf ? selectedPdf.name : t.upload.pdfDropHere}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{t.upload.pdfAttachment}</p>
           </div>
         </CardContent>
       </Card>

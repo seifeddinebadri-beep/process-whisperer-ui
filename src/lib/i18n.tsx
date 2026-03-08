@@ -114,6 +114,9 @@ export const translations = {
       fileUploaded: "Fichier téléversé",
       contextAssigned: "Contexte assigné",
       readyForAnalysis: "Le processus est prêt pour l'analyse.",
+      pdfAttachment: "Documentation visuelle (PDF)",
+      pdfDropHere: "Joindre un PDF avec captures d'écran du processus",
+      pdfAttached: "PDF joint",
     },
 
     // Process Analysis
@@ -134,6 +137,10 @@ export const translations = {
       stepRemoved: "Étape supprimée",
       processApproved: "Processus approuvé !",
       discoveryAvailable: "La découverte d'automatisation est maintenant disponible.",
+      screenshots: "Captures d'écran",
+      noScreenshots: "Aucune capture d'écran disponible pour ce processus.",
+      viewScreenshot: "Voir la capture",
+      page: "Page",
     },
 
     // Step Edit Modal
@@ -453,6 +460,9 @@ export const translations = {
       fileUploaded: "File uploaded",
       contextAssigned: "Context assigned",
       readyForAnalysis: "Process is ready for analysis.",
+      pdfAttachment: "Visual Documentation (PDF)",
+      pdfDropHere: "Attach a PDF with process screenshots",
+      pdfAttached: "PDF attached",
     },
 
     analysis: {
@@ -472,6 +482,10 @@ export const translations = {
       stepRemoved: "Step removed",
       processApproved: "Process approved!",
       discoveryAvailable: "Automation discovery is now available.",
+      screenshots: "Screenshots",
+      noScreenshots: "No screenshots available for this process.",
+      viewScreenshot: "View screenshot",
+      page: "Page",
     },
 
     stepModal: {

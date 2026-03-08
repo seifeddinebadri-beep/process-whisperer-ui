@@ -17,6 +17,16 @@ export interface ProcessStep {
   volumeEstimate?: string;
   stepOrder?: number;
   source?: StepSource;
+  screenshotUrl?: string;
+}
+
+export interface ProcessScreenshot {
+  id: string;
+  processId: string;
+  filePath: string;
+  pageNumber?: number;
+  caption?: string;
+  createdAt?: string;
 }
 
 export interface ProcessContext {

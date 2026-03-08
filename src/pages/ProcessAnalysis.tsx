@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter, ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -16,9 +16,10 @@ import { EditableBadges } from "@/components/process-analysis/EditableBadges";
 import { StepComparisonView } from "@/components/process-analysis/StepComparisonView";
 import { useLang } from "@/lib/i18n";
 import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
-import type { ProcessStep, ProcessContext } from "@/components/process-analysis/types";
+import type { ProcessStep, ProcessContext, ProcessScreenshot } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
+import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
 // Mock data removed — only real DB data is used
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
@@ -79,6 +80,7 @@ const ProcessAnalysis = () => {
         volumeEstimate: s.volume_estimate || "",
         stepOrder: s.step_order,
         source: (s as any).source || "manual",
+        screenshotUrl: (s as any).screenshot_url || undefined,
       }));
     },
     enabled: !!selectedProcessId,
@@ -107,6 +109,33 @@ const ProcessAnalysis = () => {
     },
     enabled: !!selectedProcessId,
   });
+
+  // Fetch screenshots for selected process
+  const { data: screenshots = [] } = useQuery({
+    queryKey: ["process-screenshots", selectedProcessId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("process_screenshots")
+        .select("*")
+        .eq("process_id", selectedProcessId)
+        .order("page_number");
+      if (error) throw error;
+      return data.map((s: any): ProcessScreenshot => ({
+        id: s.id,
+        processId: s.process_id,
+        filePath: s.file_path,
+        pageNumber: s.page_number,
+        caption: s.caption,
+        createdAt: s.created_at,
+      }));
+    },
+    enabled: !!selectedProcessId,
+  });
+
+  const getPublicUrl = (path: string) => {
+    const { data } = supabase.storage.from("process-files").getPublicUrl(path);
+    return data.publicUrl;
+  };
 
   // Always use real DB data
   const displaySteps = steps;
@@ -606,6 +635,11 @@ const ProcessAnalysis = () => {
           <BpmnFlowView steps={displaySteps} />
         </CardContent>
       </Card>
+
+      {/* Screenshots Gallery */}
+      {screenshots.length > 0 && (
+        <ScreenshotGallery screenshots={screenshots} getPublicUrl={getPublicUrl} />
+      )}
 
       {/* Edit Step Modal */}
       <StepEditModal
