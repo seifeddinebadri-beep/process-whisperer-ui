@@ -668,7 +668,9 @@ const ProcessAnalysis = () => {
 
       {/* Screenshots Gallery */}
       {screenshots.length > 0 && (
-        <ScreenshotGallery screenshots={screenshots} getPublicUrl={getPublicUrl} />
+        <div id="screenshot-gallery">
+          <ScreenshotGallery screenshots={screenshots} getPublicUrl={getPublicUrl} />
+        </div>
       )}
 
       {/* Edit Step Modal */}
