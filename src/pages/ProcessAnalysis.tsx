@@ -25,6 +25,7 @@ import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
 import { AgentMessage } from "@/components/agents/AgentMessage";
 import type { AgentLogEntry } from "@/components/agents/AgentActivityLog";
+import { Zap } from "lucide-react";
 
 const ProcessAnalysis = () => {
   const { t, lang } = useLang();
@@ -462,6 +463,31 @@ const ProcessAnalysis = () => {
 
   const approved = currentProcess?.status === "approved";
 
+  // Check if steps have no actions at all
+  const totalActions = useMemo(() => displaySteps.reduce((sum, s) => sum + (s.actions?.length || 0), 0), [displaySteps]);
+  const hasStepsButNoActions = displaySteps.length > 0 && totalActions === 0;
+
+  const [extractingActions, setExtractingActions] = useState(false);
+  const extractActionsMutation = useMutation({
+    mutationFn: async () => {
+      setExtractingActions(true);
+      const { data, error } = await supabase.functions.invoke("agent-analyze-as-is", {
+        body: { process_id: selectedProcessId, extract_actions_only: true },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: lang === "fr" ? `${data?.actions_count || 0} actions extraites` : `${data?.actions_count || 0} actions extracted` });
+      setExtractingActions(false);
+    },
+    onError: (e: any) => {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+      setExtractingActions(false);
+    },
+  });
+
   if (loadingProcesses) {
     return (
       <div className="max-w-5xl flex items-center justify-center p-12">
@@ -637,6 +663,25 @@ const ProcessAnalysis = () => {
                     />
                   ))
                 )}
+                {/* Extract actions banner */}
+                {hasStepsButNoActions && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-primary/30 bg-primary/5">
+                    <Zap className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{lang === "fr" ? "Actions détaillées non extraites" : "Detailed actions not extracted"}</p>
+                      <p className="text-xs text-muted-foreground">{lang === "fr" ? "Enrichissez chaque étape avec les actions granulaires du document source." : "Enrich each step with granular actions from the source document."}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => extractActionsMutation.mutate()}
+                      disabled={extractingActions}
+                    >
+                      {extractingActions ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
+                      {lang === "fr" ? "Extraire les actions" : "Extract actions"}
+                    </Button>
+                  </div>
+                )}
+
                 <Button variant="outline" className="w-full" onClick={() => setIsAdding(true)}>
                   <Plus className="h-4 w-4 mr-1" /> {t.analysis.addStep}
                 </Button>

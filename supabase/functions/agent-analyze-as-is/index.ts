@@ -23,6 +23,7 @@ serve(async (req) => {
     const body = await req.json();
     process_id = body.process_id;
     const pdf_path: string | null = body.pdf_path || null;
+    const extract_actions_only: boolean = body.extract_actions_only === true;
 
     if (!process_id) {
       return new Response(JSON.stringify({ error: "process_id is required" }), {
@@ -37,6 +38,147 @@ serve(async (req) => {
       });
     }
 
+    // ==================== EXTRACT ACTIONS ONLY MODE ====================
+    if (extract_actions_only) {
+      await supabase.from("agent_logs").insert({
+        process_id, agent_name: "analyst", action: "extract_actions", status: "started",
+        message: "Extracting detailed actions for existing steps...",
+      });
+
+      // Fetch existing steps
+      const { data: existingSteps, error: stepsErr } = await supabase
+        .from("process_steps")
+        .select("id, name, description, role, tool_used")
+        .eq("process_id", process_id)
+        .order("step_order");
+
+      if (stepsErr || !existingSteps?.length) {
+        return new Response(JSON.stringify({ error: "No steps found" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch document chunks for context
+      const { data: chunks } = await supabase
+        .from("document_chunks")
+        .select("content, chunk_index")
+        .eq("process_id", process_id)
+        .order("chunk_index");
+
+      const fullText = (chunks || []).map((c: any) => c.content).join("\n\n");
+
+      const stepsDescription = existingSteps.map((s: any, i: number) =>
+        `Step ${i + 1} (id: ${s.id}): ${s.name} — ${s.description || "No description"} [Role: ${s.role || "N/A"}, Tool: ${s.tool_used || "N/A"}]`
+      ).join("\n");
+
+      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "system",
+              content:
+                "Tu es l'agent Analyst. À partir des étapes de processus existantes et du document source, " +
+                "génère des actions granulaires pour chaque étape. Chaque action est une interaction utilisateur/système " +
+                "spécifique (clic, saisie, validation, navigation, vérification). " +
+                "Utilise les step_id fournis pour associer les actions. " +
+                "RÈGLES: Ne jamais inventer d'informations absentes du document. Retourne UNIQUEMENT via l'appel de fonction.",
+            },
+            {
+              role: "user",
+              content: `Voici les étapes existantes:\n${stepsDescription}\n\nDocument source:\n${fullText.slice(0, 25000)}\n\nGénère les actions détaillées pour chaque étape.`,
+            },
+          ],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "extract_step_actions",
+                description: "Extract granular actions for each existing process step",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    step_actions: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          step_id: { type: "string", description: "The UUID of the existing step" },
+                          actions: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                description: { type: "string" },
+                                system_used: { type: "string" },
+                                screenshot_page: { type: "number" },
+                              },
+                              required: ["description"],
+                              additionalProperties: false,
+                            },
+                          },
+                        },
+                        required: ["step_id", "actions"],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                  required: ["step_actions"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          ],
+          tool_choice: { type: "function", function: { name: "extract_step_actions" } },
+        }),
+      });
+
+      if (!aiResponse.ok) {
+        const errText = await aiResponse.text();
+        throw new Error(`AI error [${aiResponse.status}]: ${errText}`);
+      }
+
+      const aiData = await aiResponse.json();
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) throw new Error("No tool call in AI response");
+
+      const { step_actions } = JSON.parse(toolCall.function.arguments);
+      const validStepIds = new Set(existingSteps.map((s: any) => s.id));
+      let totalActions = 0;
+
+      for (const sa of (step_actions || [])) {
+        if (!validStepIds.has(sa.step_id) || !sa.actions?.length) continue;
+        // Delete existing actions for this step first
+        await supabase.from("step_actions").delete().eq("step_id", sa.step_id);
+        const inserts = sa.actions.map((a: any, idx: number) => ({
+          step_id: sa.step_id,
+          action_order: idx,
+          description: a.description,
+          system_used: a.system_used || null,
+          screenshot_page: a.screenshot_page ?? null,
+        }));
+        const { error: insErr } = await supabase.from("step_actions").insert(inserts);
+        if (!insErr) totalActions += inserts.length;
+      }
+
+      await supabase.from("agent_logs").insert({
+        process_id, agent_name: "analyst", action: "extract_actions", status: "completed",
+        message: `Extracted ${totalActions} detailed actions across ${step_actions?.length || 0} steps.`,
+        metadata: { actions_count: totalActions, steps_count: step_actions?.length || 0 },
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, actions_count: totalActions }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ==================== FULL ANALYSIS MODE (original) ====================
     // Log start
     await supabase.from("agent_logs").insert({
       process_id, agent_name: "analyst", action: "analyze_as_is", status: "started",
@@ -100,7 +242,6 @@ serve(async (req) => {
     ];
 
     // If PDF was uploaded, download and include pages as images
-    let screenshotPaths: { page: number; path: string }[] = [];
     if (pdf_path) {
       try {
         const { data: pdfData, error: pdfError } = await supabase.storage
@@ -108,7 +249,6 @@ serve(async (req) => {
           .download(pdf_path);
 
         if (!pdfError && pdfData) {
-          // Convert PDF to base64 and send as document to Gemini
           const pdfBytes = await pdfData.arrayBuffer();
           const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
           
@@ -126,7 +266,6 @@ serve(async (req) => {
         }
       } catch (e) {
         console.error("PDF processing error:", e);
-        // Continue without PDF — text analysis still works
       }
     }
 
@@ -245,7 +384,7 @@ serve(async (req) => {
     const { context, steps, agent_summary, confidence, gaps_identified } = JSON.parse(toolCall.function.arguments);
 
     // Delete existing data
-    await supabase.from("step_actions").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // clear all first via step cascade
+    await supabase.from("step_actions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     await supabase.from("process_steps").delete().eq("process_id", process_id);
     await supabase.from("process_context").delete().eq("process_id", process_id);
     await supabase.from("process_screenshots").delete().eq("process_id", process_id);

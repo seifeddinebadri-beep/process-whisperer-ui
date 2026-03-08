@@ -35,7 +35,7 @@ const sourceConfig: Record<StepSource, { label: string; className: string }> = {
 
 export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl, onScreenshotPageClick }: StepCardProps) => {
   const [showScreenshot, setShowScreenshot] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(true);
   const imgUrl = screenshotUrl || step.screenshotUrl;
   const actions = step.actions || [];
 
@@ -96,13 +96,14 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
                 {actions.length > 0 && (
                   <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
                     <CollapsibleTrigger asChild>
-                      <button className="flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline">
-                        <ChevronRight className={`h-3 w-3 transition-transform ${actionsOpen ? "rotate-90" : ""}`} />
-                        {actions.length} action{actions.length > 1 ? "s" : ""} détaillée{actions.length > 1 ? "s" : ""}
+                      <button className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md bg-primary/5 hover:bg-primary/10 border border-primary/15 transition-colors">
+                        <ChevronRight className={`h-3 w-3 text-primary transition-transform ${actionsOpen ? "rotate-90" : ""}`} />
+                        <span className="text-[11px] font-semibold text-primary">{actions.length}</span>
+                        <span className="text-[11px] font-medium text-foreground/80">action{actions.length > 1 ? "s" : ""}</span>
                       </button>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <div className="mt-2 ml-1 space-y-1.5 border-l-2 border-primary/20 pl-3">
+                      <div className="mt-2 ml-1 space-y-1.5 border-l-2 border-primary/20 pl-3 py-1.5 bg-muted/30 rounded-r-md">
                         {actions.map((action, aIdx) => (
                           <ActionItem
                             key={action.id || aIdx}
