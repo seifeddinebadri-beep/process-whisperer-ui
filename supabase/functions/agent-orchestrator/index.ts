@@ -157,7 +157,7 @@ serve(async (req) => {
     }
 
     // ===== PHASE 3: Discoverer (use cases + variants + detailed pages) =====
-    await log(supabase, process_id, "phase_discoverer", "started", "Phase 3/4 — Discoverer: identifying automation use cases, variants, and generating detailed pages...");
+    await log(supabase, process_id, "phase_discoverer", "started", "Phase 3/5 — Discoverer: identifying automation use cases, variants, and generating detailed pages...");
 
     let discovererResult: any;
     try {
