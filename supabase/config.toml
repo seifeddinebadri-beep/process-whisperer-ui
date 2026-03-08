@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.agent-clarify]
 verify_jwt = false
+
+[functions.extract-pdf-screenshots]
+verify_jwt = false

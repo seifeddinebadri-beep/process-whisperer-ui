@@ -215,6 +215,26 @@ const ProcessUpload = () => {
         updateLastEntry({ status: "error", message: "Agent Analyst failed." });
       }
 
+      // Extract PDF screenshots and link to steps
+      if (pdfPath) {
+        addAgentEntry({ agent: "analyst", status: "working", message: "Extracting screenshots from PDF pages..." });
+        try {
+          const { data: ssData, error: ssError } = await supabase.functions.invoke("extract-pdf-screenshots", {
+            body: { process_id: process.id, pdf_path: pdfPath },
+          });
+          if (ssError) {
+            updateLastEntry({ status: "error", message: "Screenshot extraction failed." });
+          } else {
+            updateLastEntry({
+              status: "done",
+              message: `Extracted ${ssData?.screenshots_created || 0} screenshots, linked ${ssData?.steps_linked || 0} steps.`,
+            });
+          }
+        } catch (e) {
+          updateLastEntry({ status: "error", message: "Screenshot extraction failed." });
+        }
+      }
+
       addAgentEntry({ agent: "analyst", status: "done", message: "Analysis complete — process ready for review." });
       return process;
     },

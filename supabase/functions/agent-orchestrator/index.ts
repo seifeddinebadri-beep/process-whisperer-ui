@@ -57,12 +57,30 @@ serve(async (req) => {
 
     await log(supabase, process_id, "orchestrate", "started", "Orchestrator started — launching full analysis pipeline...");
 
+    // ===== Check for PDF path =====
+    const { data: processRecord } = await supabase
+      .from("uploaded_processes")
+      .select("file_path, file_name")
+      .eq("id", process_id)
+      .single();
+
+    // Check if there's a PDF in the screenshots folder for this process
+    let pdfPath: string | null = null;
+    const { data: existingScreenshots } = await supabase
+      .from("process_screenshots")
+      .select("file_path")
+      .eq("process_id", process_id)
+      .limit(1);
+    if (existingScreenshots?.length && existingScreenshots[0].file_path?.endsWith(".pdf")) {
+      pdfPath = existingScreenshots[0].file_path;
+    }
+
     // ===== PHASE 1: Analyst =====
-    await log(supabase, process_id, "phase_analyst", "started", "Phase 1/4 — Analyst: extracting process steps and context...");
+    await log(supabase, process_id, "phase_analyst", "started", "Phase 1/5 — Analyst: extracting process steps and context...");
     
     let analystResult: any;
     try {
-      analystResult = await callFunction("agent-analyze-as-is", { process_id });
+      analystResult = await callFunction("agent-analyze-as-is", { process_id, pdf_path: pdfPath });
       await log(supabase, process_id, "phase_analyst", "completed",
         `Analyst done: ${analystResult.steps_count || 0} steps extracted, confidence ${analystResult.confidence || "N/A"}%.`,
         { steps_count: analystResult.steps_count, confidence: analystResult.confidence }
@@ -72,8 +90,22 @@ serve(async (req) => {
       throw e;
     }
 
+    // ===== PHASE 1b: Screenshot Extraction =====
+    if (pdfPath) {
+      await log(supabase, process_id, "phase_screenshots", "started", "Phase 1b/5 — Extracting PDF screenshots and linking to steps...");
+      try {
+        const ssResult = await callFunction("extract-pdf-screenshots", { process_id, pdf_path: pdfPath });
+        await log(supabase, process_id, "phase_screenshots", "completed",
+          `Screenshots done: ${ssResult.screenshots_created || 0} pages extracted, ${ssResult.steps_linked || 0} steps linked.`,
+          ssResult
+        );
+      } catch (e) {
+        await log(supabase, process_id, "phase_screenshots", "warning", `Screenshot extraction failed: ${(e as Error).message}`);
+      }
+    }
+
     // ===== PHASE 2: Clarifier =====
-    await log(supabase, process_id, "phase_clarifier", "started", "Phase 2/4 — Clarifier: generating and auto-answering questions...");
+    await log(supabase, process_id, "phase_clarifier", "started", "Phase 2/5 — Clarifier: generating and auto-answering questions...");
 
     let questionsAnswered = 0;
     try {
@@ -125,7 +157,7 @@ serve(async (req) => {
     }
 
     // ===== PHASE 3: Discoverer (use cases + variants + detailed pages) =====
-    await log(supabase, process_id, "phase_discoverer", "started", "Phase 3/4 — Discoverer: identifying automation use cases, variants, and generating detailed pages...");
+    await log(supabase, process_id, "phase_discoverer", "started", "Phase 3/5 — Discoverer: identifying automation use cases, variants, and generating detailed pages...");
 
     let discovererResult: any;
     try {
@@ -140,7 +172,7 @@ serve(async (req) => {
     }
 
     // ===== PHASE 4: Business Analyst =====
-    await log(supabase, process_id, "phase_ba", "started", "Phase 4/4 — Business Analyst: challenging use cases and generating PDDs...");
+    await log(supabase, process_id, "phase_ba", "started", "Phase 4/5 — Business Analyst: challenging use cases and generating PDDs...");
 
     let pddsGenerated = 0;
     try {
