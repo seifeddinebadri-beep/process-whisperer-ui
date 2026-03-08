@@ -172,7 +172,7 @@ serve(async (req) => {
     }
 
     // ===== PHASE 4: Business Analyst =====
-    await log(supabase, process_id, "phase_ba", "started", "Phase 4/4 — Business Analyst: challenging use cases and generating PDDs...");
+    await log(supabase, process_id, "phase_ba", "started", "Phase 4/5 — Business Analyst: challenging use cases and generating PDDs...");
 
     let pddsGenerated = 0;
     try {
