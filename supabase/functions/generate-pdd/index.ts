@@ -43,11 +43,30 @@ serve(async (req) => {
     const useCase = ucRes.data;
     if (!useCase) throw new Error("Use case not found");
 
-    const [stepsRes, contextRes, detailRes] = await Promise.all([
+    const [stepsRes, contextRes, detailRes, screenshotsRes] = await Promise.all([
       supabase.from("process_steps").select("*").eq("process_id", useCase.process_id).order("step_order"),
       supabase.from("process_context").select("*").eq("process_id", useCase.process_id).maybeSingle(),
       supabase.from("use_case_details").select("detail_content").eq("use_case_id", use_case_id).maybeSingle(),
+      supabase.from("process_screenshots").select("*").eq("process_id", useCase.process_id).order("page_number"),
     ]);
+
+    // Fetch step_actions for all steps
+    const steps = stepsRes.data || [];
+    const stepIds = steps.map((s: any) => s.id);
+    let actionsMap: Record<string, any[]> = {};
+    if (stepIds.length > 0) {
+      const { data: allActions } = await supabase
+        .from("step_actions")
+        .select("*")
+        .in("step_id", stepIds)
+        .order("action_order");
+      for (const a of (allActions || [])) {
+        if (!actionsMap[a.step_id]) actionsMap[a.step_id] = [];
+        actionsMap[a.step_id].push(a);
+      }
+    }
+
+    const screenshots = screenshotsRes.data || [];
 
     // Build comprehensive context
     const parts: string[] = [];
@@ -71,7 +90,6 @@ serve(async (req) => {
       }
     }
 
-    const steps = stepsRes.data || [];
     if (steps.length > 0) {
       parts.push("\n=== ÉTAPES DU PROCESSUS AS-IS ===");
       for (const s of steps) {
@@ -86,7 +104,16 @@ serve(async (req) => {
         if (s.data_outputs?.length) parts.push(`  Sorties: ${s.data_outputs.join(", ")}`);
         if (s.frequency) parts.push(`  Fréquence: ${s.frequency}`);
         if (s.volume_estimate) parts.push(`  Volume: ${s.volume_estimate}`);
+        if (s.screenshot_url) parts.push(`  📸 Screenshot: ${s.screenshot_url}`);
         parts.push(`  Source: ${s.source}`);
+        // Add granular actions
+        const stepActions = actionsMap[s.id] || [];
+        if (stepActions.length > 0) {
+          parts.push(`  Actions détaillées :`);
+          for (const a of stepActions) {
+            parts.push(`    → Action ${a.action_order}: ${a.description} [Système: ${a.system_used || "N/A"}${a.screenshot_url ? `, 📸 ${a.screenshot_url}` : ""}]`);
+          }
+        }
       }
     }
 
@@ -99,6 +126,14 @@ serve(async (req) => {
       if (ctx.pain_points_summary) parts.push(`Points de douleur: ${ctx.pain_points_summary}`);
       if (ctx.volume_and_frequency) parts.push(`Volume et fréquence: ${ctx.volume_and_frequency}`);
       if (ctx.stakeholder_notes) parts.push(`Notes parties prenantes: ${ctx.stakeholder_notes}`);
+    }
+
+    // Screenshots section
+    if (screenshots.length > 0) {
+      parts.push("\n=== CAPTURES D'ÉCRAN DU PROCESSUS ===");
+      for (const sc of screenshots) {
+        parts.push(`- Page ${sc.page_number || "?"}: ${sc.caption || "Sans légende"} (${sc.file_path})`);
+      }
     }
 
     const detail = detailRes.data?.detail_content as any;
@@ -128,8 +163,14 @@ serve(async (req) => {
     const systemPrompt = `Tu es un expert senior en automatisation de processus et rédaction de PDD (Process Design Document).
 Tu dois produire un document COMPLET, DÉTAILLÉ et ACTIONNABLE qui servira de référence pour l'équipe de développement.
 
+Tu as accès aux ACTIONS GRANULAIRES de chaque étape (sous-étapes détaillées avec système utilisé) et aux CAPTURES D'ÉCRAN associées.
+Intègre ces informations dans le PDD :
+- Pour chaque étape As-Is, inclus les actions granulaires comme sous-étapes avec le système utilisé
+- Si une étape ou action a un screenshot_url, référence-le dans le champ correspondant
+- Les screenshots sont des preuves visuelles du processus actuel — mentionne-les dans la description des étapes
+
 INSTRUCTIONS CRITIQUES :
-1. Pour le processus AS-IS : Décris chaque étape comme un bullet point structuré incluant le rôle responsable, l'action, l'outil utilisé, les entrées et sorties de données
+1. Pour le processus AS-IS : Décris chaque étape comme un bullet point structuré incluant le rôle responsable, l'action, l'outil utilisé, les entrées et sorties de données. INCLUS les actions granulaires comme sous-étapes.
 2. Pour le processus TO-BE : Décris chaque étape transformée comme un bullet point précisant ce qui est automatisé vs ce qui reste manuel, avec le mécanisme technique proposé
 3. Pour chaque étape TO-BE, identifie clairement les TRIGGERS (déclencheurs), INPUTS (données d'entrée), OUTPUTS (données de sortie), et EXCEPTIONS (cas d'erreur ou cas limites)
 4. Les RISQUES doivent être catégorisés (technique, organisationnel, données, sécurité) avec un plan de mitigation concret
@@ -189,6 +230,21 @@ Le PDD est un document de référence. Toute information inventée peut entraîn
                         outputs: { type: "array", items: { type: "string" } },
                         pain_points: { type: "array", items: { type: "string" } },
                         duration_estimate: { type: "string" },
+                        screenshot_url: { type: "string", description: "URL du screenshot de cette étape si disponible" },
+                        actions: {
+                          type: "array",
+                          description: "Actions granulaires détaillées de cette étape",
+                          items: {
+                            type: "object",
+                            properties: {
+                              description: { type: "string" },
+                              system_used: { type: "string" },
+                              screenshot_url: { type: "string" },
+                            },
+                            required: ["description"],
+                            additionalProperties: false,
+                          },
+                        },
                       },
                       required: ["step_number", "name", "responsible_role", "action_description", "tool_used", "inputs", "outputs", "pain_points", "duration_estimate"],
                       additionalProperties: false,
@@ -386,7 +442,7 @@ Le PDD est un document de référence. Toute information inventée peut entraîn
       }
     }
 
-    const htmlContent = generatePddHtml(pddContent, useCase, variants);
+    const htmlContent = generatePddHtml(pddContent, useCase, variants, actionsMap, steps, screenshots);
 
     const { data: pdd, error: pddError } = await supabase.from("pdd_documents").insert({
       conversation_id,
@@ -421,7 +477,7 @@ Le PDD est un document de référence. Toute information inventée peut entraîn
   }
 });
 
-function generatePddHtml(pdd: any, useCase: any, variants: any[]): string {
+function generatePddHtml(pdd: any, useCase: any, variants: any[], actionsMap: Record<string, any[]>, dbSteps: any[], screenshots: any[]): string {
   const severityColors: Record<string, string> = {
     low: "#22c55e", medium: "#f59e0b", high: "#ef4444", critical: "#991b1b",
   };
@@ -432,6 +488,10 @@ function generatePddHtml(pdd: any, useCase: any, variants: any[]): string {
   };
 
   const recommendedVariant = variants.find(v => v.recommended);
+
+  // Build a map of step_order -> db step for screenshot lookups
+  const stepByOrder: Record<number, any> = {};
+  for (const s of dbSteps) stepByOrder[s.step_order] = s;
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -474,6 +534,14 @@ function generatePddHtml(pdd: any, useCase: any, variants: any[]): string {
   .success-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
   .arrow { color: #22c55e; font-weight: bold; }
   hr.section-break { border: none; border-top: 2px solid #e2e8f0; margin: 32px 0; }
+  .screenshot-thumb { max-width: 200px; max-height: 150px; border-radius: 6px; border: 1px solid #e2e8f0; margin: 6px 0; }
+  .action-list { margin: 8px 0 4px 16px; padding-left: 16px; border-left: 2px solid #e0e7ff; }
+  .action-item { font-size: 12px; color: #374151; margin: 4px 0; }
+  .action-system { color: #6366f1; font-weight: 500; }
+  .screenshot-gallery { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
+  .screenshot-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; text-align: center; max-width: 220px; }
+  .screenshot-card img { max-width: 200px; max-height: 150px; border-radius: 4px; }
+  .screenshot-card p { font-size: 11px; color: #6b7280; margin: 4px 0 0; }
   @media print { body { padding: 20px; font-size: 12px; } h1 { font-size: 22px; } .step-card, .phase-card, .risk-card { break-inside: avoid; } }
 </style>
 </head>
@@ -494,8 +562,12 @@ function generatePddHtml(pdd: any, useCase: any, variants: any[]): string {
 
 <!-- 2. As-Is Process -->
 <h2>2. Processus Actuel (As-Is)</h2>
-<p style="color:#6b7280; font-size:13px;">Chaque étape du processus actuel avec les rôles, outils, entrées/sorties et points de douleur identifiés.</p>
-${(pdd.as_is_steps || []).map((s: any) => `
+<p style="color:#6b7280; font-size:13px;">Chaque étape du processus actuel avec les rôles, outils, entrées/sorties, actions détaillées et captures d'écran.</p>
+${(pdd.as_is_steps || []).map((s: any) => {
+  const dbStep = stepByOrder[s.step_number];
+  const stepScreenshot = s.screenshot_url || dbStep?.screenshot_url;
+  const stepActions = s.actions || (dbStep ? (actionsMap[dbStep.id] || []) : []);
+  return `
 <div class="step-card">
   <div class="step-header">
     <span class="step-number">${s.step_number}</span>
@@ -509,8 +581,19 @@ ${(pdd.as_is_steps || []).map((s: any) => `
     <div class="detail-row"><span class="detail-label">📥 Entrées</span><span>${(s.inputs || []).map((i: string) => `<span class="tag">${i}</span>`).join(" ")}</span></div>
     <div class="detail-row"><span class="detail-label">📤 Sorties</span><span>${(s.outputs || []).map((o: string) => `<span class="tag">${o}</span>`).join(" ")}</span></div>
     ${(s.pain_points || []).length > 0 ? `<div class="detail-row"><span class="detail-label">⚠️ Problèmes</span><span>${s.pain_points.map((p: string) => `<span class="tag pain-tag">${p}</span>`).join(" ")}</span></div>` : ""}
+    ${stepScreenshot ? `<div class="detail-row"><span class="detail-label">📸 Capture</span><span><img class="screenshot-thumb" src="${stepScreenshot}" alt="Screenshot étape ${s.step_number}" /></span></div>` : ""}
+    ${stepActions.length > 0 ? `
+    <div class="action-list">
+      <strong style="font-size:12px; color:#4338ca;">Actions détaillées :</strong>
+      ${stepActions.map((a: any, idx: number) => `
+      <div class="action-item">
+        ${idx + 1}. ${a.description} ${a.system_used ? `<span class="action-system">[${a.system_used}]</span>` : ""}
+        ${a.screenshot_url ? `<br><img class="screenshot-thumb" src="${a.screenshot_url}" alt="Screenshot action" style="max-height:80px;" />` : ""}
+      </div>`).join("")}
+    </div>` : ""}
   </div>
-</div>`).join("")}
+</div>`;
+}).join("")}
 
 <!-- 3. To-Be Process -->
 <h2>3. Processus Cible (To-Be)</h2>
@@ -668,6 +751,19 @@ ${(pdd.success_criteria || []).map((c: any) => `<tr>
 </tr>`).join("")}
 </tbody>
 </table>
+
+${screenshots.length > 0 ? `
+<!-- 11. Screenshots Appendix -->
+<h2>11. Annexe — Captures d'écran du processus</h2>
+<p style="color:#6b7280; font-size:13px;">Preuves visuelles collectées lors de l'analyse du processus actuel.</p>
+<div class="screenshot-gallery">
+${screenshots.map((sc: any) => `
+<div class="screenshot-card">
+  <img src="${sc.file_path}" alt="${sc.caption || `Page ${sc.page_number}`}" />
+  <p>${sc.caption || `Page ${sc.page_number || "?"}`}</p>
+</div>`).join("")}
+</div>
+` : ""}
 
 <hr class="section-break">
 <p style="text-align:center; color:#999; font-size:12px;">

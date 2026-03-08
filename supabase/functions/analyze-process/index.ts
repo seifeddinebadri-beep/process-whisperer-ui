@@ -7,7 +7,14 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function buildContext(processRes: any, stepsRes: any, contextRes: any, chunksRes: any): string {
+function buildContext(
+  processRes: any,
+  stepsRes: any,
+  contextRes: any,
+  chunksRes: any,
+  actionsMap: Record<string, any[]>,
+  screenshots: any[],
+): string {
   const parts: string[] = [];
   parts.push(`Processus : ${processRes.data.file_name}`);
 
@@ -36,8 +43,17 @@ function buildContext(processRes: any, stepsRes: any, contextRes: any, chunksRes
         `Points de douleur: ${s.pain_points || "N/A"}\n` +
         `Règles métier: ${s.business_rules || "N/A"}\n` +
         `Fréquence: ${s.frequency || "N/A"}\n` +
-        `Volume estimé: ${s.volume_estimate || "N/A"}`
+        `Volume estimé: ${s.volume_estimate || "N/A"}` +
+        (s.screenshot_url ? `\n📸 Screenshot: ${s.screenshot_url}` : "")
       );
+      // Add granular actions
+      const stepActions = actionsMap[s.id] || [];
+      if (stepActions.length > 0) {
+        parts.push(`  Actions détaillées :`);
+        for (const a of stepActions) {
+          parts.push(`    → Action ${a.action_order}: ${a.description} [Système: ${a.system_used || "N/A"}${a.screenshot_url ? `, 📸 Screenshot: ${a.screenshot_url}` : ""}]`);
+        }
+      }
     }
   }
 
@@ -46,6 +62,14 @@ function buildContext(processRes: any, stepsRes: any, contextRes: any, chunksRes
     parts.push("\n--- Extraits de documents ---");
     for (const c of chunks) {
       parts.push(`[Chunk ${c.chunk_index}] ${c.content}`);
+    }
+  }
+
+  // Screenshots section
+  if (screenshots.length > 0) {
+    parts.push("\n--- Captures d'écran du processus ---");
+    for (const sc of screenshots) {
+      parts.push(`- Page ${sc.page_number || "?"}: ${sc.caption || "Sans légende"} (${sc.file_path})`);
     }
   }
 
@@ -258,6 +282,9 @@ async function generateUseCaseDetail(
             "comparaison avant/après (nombre d'étapes, effort humain, outils, risques), " +
             "métriques de valeur (business value, complexité, risque, impact changement), " +
             "et liens de traçabilité vers les étapes, rôles, outils et règles métier du processus. " +
+            "Tu as accès aux ACTIONS GRANULAIRES de chaque étape et aux CAPTURES D'ÉCRAN associées. " +
+            "Utilise les actions détaillées pour identifier précisément les manipulations manuelles automatisables. " +
+            "Référence les screenshots comme preuves visuelles dans tes signaux de détection et liens de traçabilité. " +
             "Génère du contenu réaliste, spécifique et professionnel basé sur le contexte du processus. " +
             "Retourne tes résultats UNIQUEMENT via l'appel de fonction fourni.\n\n" +
             "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
@@ -319,11 +346,12 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const [processRes, stepsRes, contextRes, chunksRes] = await Promise.all([
+    const [processRes, stepsRes, contextRes, chunksRes, screenshotsRes] = await Promise.all([
       supabase.from("uploaded_processes").select("*").eq("id", process_id).single(),
       supabase.from("process_steps").select("*").eq("process_id", process_id).order("step_order"),
       supabase.from("process_context").select("*").eq("process_id", process_id).single(),
       supabase.from("document_chunks").select("content, chunk_index").eq("process_id", process_id).order("chunk_index").limit(20),
+      supabase.from("process_screenshots").select("*").eq("process_id", process_id).order("page_number"),
     ]);
 
     if (processRes.error || !processRes.data) {
@@ -332,13 +360,29 @@ serve(async (req) => {
       });
     }
 
+    // Fetch step_actions for all steps
+    const steps = stepsRes.data || [];
+    const stepIds = steps.map((s: any) => s.id);
+    let actionsMap: Record<string, any[]> = {};
+    if (stepIds.length > 0) {
+      const { data: allActions } = await supabase
+        .from("step_actions")
+        .select("*")
+        .in("step_id", stepIds)
+        .order("action_order");
+      for (const a of (allActions || [])) {
+        if (!actionsMap[a.step_id]) actionsMap[a.step_id] = [];
+        actionsMap[a.step_id].push(a);
+      }
+    }
+
     // Log start
     await supabase.from("agent_logs").insert({
       process_id, agent_name: "discoverer", action: "analyze_use_cases", status: "started",
-      message: `Discoverer agent started — analyzing ${stepsRes.data?.length || 0} steps...`,
+      message: `Discoverer agent started — analyzing ${steps.length} steps with ${Object.values(actionsMap).flat().length} actions...`,
     });
 
-    const fullContext = buildContext(processRes, stepsRes, contextRes, chunksRes);
+    const fullContext = buildContext(processRes, stepsRes, contextRes, chunksRes, actionsMap, screenshotsRes.data || []);
 
     // Call AI to generate use cases WITH variants
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -355,6 +399,9 @@ serve(async (req) => {
             content:
               "Tu es un expert en automatisation de processus métier (RPA, BPM, AI). " +
               "Analyse le processus fourni et identifie les opportunités d'automatisation concrètes. " +
+              "Tu as accès aux ACTIONS GRANULAIRES de chaque étape (sous-étapes détaillées avec système utilisé) et aux CAPTURES D'ÉCRAN associées. " +
+              "Utilise les actions détaillées pour identifier les manipulations manuelles répétitives, les transferts entre systèmes, et les tâches basées sur des règles. " +
+              "Référence les screenshots comme preuves visuelles dans tes analyses. " +
               "Pour chaque cas d'usage, génère 2 à 3 variantes d'approche d'automatisation différentes. " +
               "Par exemple : Variante 1 = RPA simple, Variante 2 = IA + OCR, Variante 3 = Intégration complète. " +
               "Marque une seule variante comme recommandée par cas d'usage. " +
@@ -459,24 +506,18 @@ serve(async (req) => {
     const { data: existingUCs } = await supabase.from("automation_use_cases").select("id").eq("process_id", process_id);
     if (existingUCs && existingUCs.length > 0) {
       const ucIds = existingUCs.map((uc: any) => uc.id);
-
-      // Get conversation IDs for these use cases
       const { data: existingConvs } = await supabase.from("ba_conversations").select("id").in("use_case_id", ucIds);
       if (existingConvs && existingConvs.length > 0) {
         const convIds = existingConvs.map((c: any) => c.id);
         await supabase.from("ba_messages").delete().in("conversation_id", convIds);
         await supabase.from("ba_conversations").delete().in("use_case_id", ucIds);
       }
-
-      // Delete PDD documents, use case details, and variants
       await supabase.from("pdd_documents").delete().in("use_case_id", ucIds);
       await supabase.from("use_case_details").delete().in("use_case_id", ucIds);
       await supabase.from("automation_variants").delete().in("use_case_id", ucIds);
     }
     const { error: deleteError } = await supabase.from("automation_use_cases").delete().eq("process_id", process_id);
-    if (deleteError) {
-      console.error("Failed to delete old use cases:", deleteError);
-    }
+    if (deleteError) console.error("Failed to delete old use cases:", deleteError);
 
     // Insert use cases and their variants
     let totalVariants = 0;
@@ -504,7 +545,6 @@ serve(async (req) => {
 
       insertedUseCases.push({ id: inserted.id, title: uc.title, description: uc.description || "" });
 
-      // Insert variants
       if (uc.variants && Array.isArray(uc.variants)) {
         const variantInserts = uc.variants.map((v: any, idx: number) => ({
           use_case_id: inserted.id,

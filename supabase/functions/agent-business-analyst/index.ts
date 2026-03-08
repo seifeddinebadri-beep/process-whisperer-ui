@@ -54,6 +54,22 @@ serve(async (req) => {
       supabase.from("agent_logs").select("message").eq("process_id", useCase.process_id).in("agent_name", ["clarifier", "business_analyst"]).eq("status", "completed").order("created_at", { ascending: false }).limit(15),
     ]);
 
+    // Fetch step_actions for all steps
+    const steps = stepsRes.data || [];
+    const stepIds = steps.map((s: any) => s.id);
+    let actionsMap: Record<string, any[]> = {};
+    if (stepIds.length > 0) {
+      const { data: allActions } = await supabase
+        .from("step_actions")
+        .select("*")
+        .in("step_id", stepIds)
+        .order("action_order");
+      for (const a of (allActions || [])) {
+        if (!actionsMap[a.step_id]) actionsMap[a.step_id] = [];
+        actionsMap[a.step_id].push(a);
+      }
+    }
+
     // Get or create conversation
     let convId = conversation_id;
     if (!convId) {
@@ -97,11 +113,14 @@ serve(async (req) => {
       }
     }
 
-    const steps = stepsRes.data || [];
     if (steps.length > 0) {
       contextParts.push("\n--- Étapes du processus As-Is ---");
       for (const s of steps) {
-        contextParts.push(`${s.step_order}. ${s.name}: ${s.description || ""} (Rôle: ${s.role || "N/A"}, Outil: ${s.tool_used || "N/A"}, Règles: ${s.business_rules || "N/A"})`);
+        contextParts.push(`${s.step_order}. ${s.name}: ${s.description || ""} (Rôle: ${s.role || "N/A"}, Outil: ${s.tool_used || "N/A"}, Règles: ${s.business_rules || "N/A"}${s.screenshot_url ? ", 📸 Screenshot" : ""})`);
+        const stepActions = actionsMap[s.id] || [];
+        for (const a of stepActions) {
+          contextParts.push(`  → Action ${a.action_order}: ${a.description} [Système: ${a.system_used || "N/A"}${a.screenshot_url ? ", 📸 Screenshot" : ""}]`);
+        }
       }
     }
 
@@ -144,7 +163,6 @@ serve(async (req) => {
         : `Processing user response: "${user_message?.slice(0, 80)}..."`,
     });
 
-    // Count actual user answers (not skips)
     const userAnswers = conversationMessages.filter((m: any) => m.role === "user" && !m.content.includes("Question passée") && !m.content.includes("passe cette question")).length;
     const shouldGeneratePDD = userAnswers >= 3 && user_message;
     const MAX_BA_QUESTIONS = 20;
@@ -152,6 +170,9 @@ serve(async (req) => {
 
     const systemPrompt = `Tu es l'agent Business Analyst, un expert senior en analyse métier et transformation digitale.
 Ton rôle est de challenger l'approche d'automatisation proposée pour s'assurer qu'elle est robuste, réaliste et bien pensée.
+
+Tu as accès aux ACTIONS GRANULAIRES de chaque étape (sous-étapes détaillées avec système utilisé) et aux CAPTURES D'ÉCRAN associées.
+Utilise ces informations pour poser des questions plus précises sur les manipulations concrètes et les systèmes impliqués.
 
 BUDGET DE QUESTIONS : max ${MAX_BA_QUESTIONS}, déjà posées ~${totalAsked}. Reste ~${MAX_BA_QUESTIONS - totalAsked}.
 ${totalAsked >= MAX_BA_QUESTIONS ? "Limite atteinte. Retourne pdd_ready=true avec un message de synthèse." : ""}
@@ -182,7 +203,7 @@ ${shouldGeneratePDD ? "L'utilisateur a répondu à suffisamment de questions. Si
 
 RÈGLES ANTI-HALLUCINATION (STRICTES) :
 - Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le contexte fourni.
-- Tes questions de challenge doivent TOUJOURS référencer des éléments spécifiques du cas d'usage (étape, variante, outil, règle métier mentionnée).
+- Tes questions de challenge doivent TOUJOURS référencer des éléments spécifiques du cas d'usage (étape, variante, outil, action granulaire, règle métier mentionnée).
 - N'invente JAMAIS de scénarios hypothétiques sans rapport avec le contexte fourni.
 - Ne fabrique JAMAIS de noms d'outils, de systèmes, d'APIs, ou de technologies qui ne sont pas cités dans le contexte.
 - Ne présuppose JAMAIS de chiffres (volumes, coûts, durées) non mentionnés. Si tu fais référence à un chiffre, il doit provenir du contexte.
@@ -295,7 +316,6 @@ ${contextParts.join("\n")}`;
         pdd_ready: args.pdd_ready || false,
       };
     } else {
-      // Fallback to content
       result.agent_message = choice?.content || "Je n'ai pas pu formuler ma question. Pouvez-vous relancer ?";
     }
 
