@@ -85,6 +85,7 @@ const ProcessAnalysis = () => {
               systemUsed: a.system_used || undefined,
               screenshotPage: a.screenshot_page ?? undefined,
               actionOrder: a.action_order,
+              screenshotUrl: (a as any).screenshot_url || undefined,
             });
           }
         }

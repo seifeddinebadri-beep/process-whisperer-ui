@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Edit2, Trash2, ChevronUp, ChevronDown, ImageIcon, ChevronRight, Monitor } from "lucide-react";
+import { Edit2, Trash2, ChevronUp, ChevronDown, ImageIcon, ChevronRight, Monitor, Plus, Upload, X } from "lucide-react";
 import type { ProcessStep, StepSource, StepAction } from "./types";
 
 interface StepCardProps {
@@ -18,6 +19,13 @@ interface StepCardProps {
   hideActions?: boolean;
   screenshotUrl?: string;
   onScreenshotPageClick?: (page: number) => void;
+  onUpdateAction?: (action: StepAction) => void;
+  onDeleteAction?: (actionId: string) => void;
+  onAddAction?: (stepId: string) => void;
+  onUploadStepScreenshot?: (stepId: string, file: File) => void;
+  onDeleteStepScreenshot?: (stepId: string) => void;
+  onUploadActionScreenshot?: (actionId: string, file: File) => void;
+  onDeleteActionScreenshot?: (actionId: string) => void;
 }
 
 const decisionLabels: Record<string, string> = {
@@ -33,9 +41,14 @@ const sourceConfig: Record<StepSource, { label: string; className: string }> = {
   merged: { label: "Merged", className: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
 };
 
-export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl, onScreenshotPageClick }: StepCardProps) => {
+export const StepCard = ({
+  step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl,
+  onScreenshotPageClick, onUpdateAction, onDeleteAction, onAddAction,
+  onUploadStepScreenshot, onDeleteStepScreenshot, onUploadActionScreenshot, onDeleteActionScreenshot
+}: StepCardProps) => {
   const [showScreenshot, setShowScreenshot] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(true);
+  const stepFileRef = useRef<HTMLInputElement>(null);
   const imgUrl = screenshotUrl || step.screenshotUrl;
   const actions = step.actions || [];
 
@@ -49,6 +62,11 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
               <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-center gap-2">
                   <div className="font-medium text-sm">{step.name}</div>
+                  {actions.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                      {actions.length} action{actions.length > 1 ? "s" : ""}
+                    </Badge>
+                  )}
                   {imgUrl && (
                     <button
                       onClick={() => setShowScreenshot(true)}
@@ -60,15 +78,51 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
                 </div>
                 <div className="text-xs text-muted-foreground">{step.description}</div>
 
-                {/* Screenshot thumbnail */}
-                {imgUrl && (
-                  <div
-                    className="mt-1 cursor-pointer rounded overflow-hidden border w-24 h-16 bg-muted/30 hover:ring-2 hover:ring-primary/40 transition-all"
-                    onClick={() => setShowScreenshot(true)}
-                  >
-                    <img src={imgUrl} alt="Screenshot" className="w-full h-full object-cover" loading="lazy" />
-                  </div>
-                )}
+                {/* Step screenshot with upload/delete */}
+                <div className="flex items-center gap-2 mt-1">
+                  {imgUrl && (
+                    <div className="relative group">
+                      <div
+                        className="cursor-pointer rounded overflow-hidden border w-24 h-16 bg-muted/30 hover:ring-2 hover:ring-primary/40 transition-all"
+                        onClick={() => setShowScreenshot(true)}
+                      >
+                        <img src={imgUrl} alt="Screenshot" className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                      {onDeleteStepScreenshot && (
+                        <button
+                          onClick={() => onDeleteStepScreenshot(step.id)}
+                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {onUploadStepScreenshot && (
+                    <>
+                      <input
+                        ref={stepFileRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) onUploadStepScreenshot(step.id, f);
+                          e.target.value = "";
+                        }}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        onClick={() => stepFileRef.current?.click()}
+                        title="Upload screenshot"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
 
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {step.source && step.source !== "manual" && sourceConfig[step.source as StepSource] && (
@@ -110,11 +164,31 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
                             action={action}
                             index={aIdx}
                             onScreenshotPageClick={onScreenshotPageClick}
+                            onUpdate={onUpdateAction}
+                            onDelete={onDeleteAction}
+                            onUploadScreenshot={onUploadActionScreenshot}
+                            onDeleteScreenshot={onDeleteActionScreenshot}
                           />
                         ))}
+                        {onAddAction && (
+                          <button
+                            onClick={() => onAddAction(step.id)}
+                            className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-1 ml-4"
+                          >
+                            <Plus className="h-3 w-3" /> Ajouter une action
+                          </button>
+                        )}
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
+                )}
+                {actions.length === 0 && onAddAction && (
+                  <button
+                    onClick={() => onAddAction(step.id)}
+                    className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-2"
+                  >
+                    <Plus className="h-3 w-3" /> Ajouter une action
+                  </button>
                 )}
               </div>
             </div>
@@ -148,28 +222,128 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
   );
 };
 
-const ActionItem = ({ action, index, onScreenshotPageClick }: { action: StepAction; index: number; onScreenshotPageClick?: (page: number) => void }) => (
-  <div className="flex items-start gap-2 text-[11px]">
-    <span className="font-mono text-muted-foreground mt-0.5 w-4 shrink-0">{index + 1}.</span>
-    <div className="flex-1 min-w-0">
-      <span className="text-foreground">{action.description}</span>
-      <div className="flex items-center gap-1.5 mt-0.5">
-        {action.systemUsed && (
-          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
-            <Monitor className="h-2.5 w-2.5 mr-0.5" />
-            {action.systemUsed}
-          </Badge>
-        )}
-        {action.screenshotPage != null && (
+const ActionItem = ({
+  action, index, onScreenshotPageClick, onUpdate, onDelete, onUploadScreenshot, onDeleteScreenshot
+}: {
+  action: StepAction;
+  index: number;
+  onScreenshotPageClick?: (page: number) => void;
+  onUpdate?: (action: StepAction) => void;
+  onDelete?: (actionId: string) => void;
+  onUploadScreenshot?: (actionId: string, file: File) => void;
+  onDeleteScreenshot?: (actionId: string) => void;
+}) => {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(action.description);
+  const [showImg, setShowImg] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const save = () => {
+    if (editValue.trim() && editValue !== action.description && onUpdate) {
+      onUpdate({ ...action, description: editValue.trim() });
+    }
+    setEditing(false);
+  };
+
+  return (
+    <>
+      <div className="flex items-start gap-2 text-[11px] group">
+        <span className="font-mono text-muted-foreground mt-0.5 w-4 shrink-0">{index + 1}.</span>
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <Input
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={save}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+              className="h-6 text-[11px] px-1.5 py-0"
+              autoFocus
+            />
+          ) : (
+            <span
+              className={`text-foreground ${onUpdate ? "cursor-pointer hover:bg-primary/5 rounded px-0.5 -mx-0.5" : ""}`}
+              onClick={() => { if (onUpdate) { setEditValue(action.description); setEditing(true); } }}
+            >
+              {action.description}
+            </span>
+          )}
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {action.systemUsed && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                <Monitor className="h-2.5 w-2.5 mr-0.5" />
+                {action.systemUsed}
+              </Badge>
+            )}
+            {action.screenshotPage != null && (
+              <button
+                onClick={() => onScreenshotPageClick?.(action.screenshotPage!)}
+                className="flex items-center gap-0.5 text-[9px] text-primary hover:underline"
+              >
+                <ImageIcon className="h-2.5 w-2.5" />
+                p.{action.screenshotPage}
+              </button>
+            )}
+            {/* Action screenshot thumbnail */}
+            {action.screenshotUrl && (
+              <div className="relative group/img">
+                <div
+                  className="cursor-pointer rounded overflow-hidden border w-12 h-8 bg-muted/30 hover:ring-1 hover:ring-primary/40"
+                  onClick={() => setShowImg(true)}
+                >
+                  <img src={action.screenshotUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                </div>
+                {onDeleteScreenshot && (
+                  <button
+                    onClick={() => onDeleteScreenshot(action.id)}
+                    className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Upload action screenshot */}
+            {onUploadScreenshot && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onUploadScreenshot(action.id, f);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="text-[9px] text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Upload screenshot"
+                >
+                  <Upload className="h-2.5 w-2.5" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        {/* Delete action button */}
+        {onDelete && (
           <button
-            onClick={() => onScreenshotPageClick?.(action.screenshotPage!)}
-            className="flex items-center gap-0.5 text-[9px] text-primary hover:underline"
+            onClick={() => onDelete(action.id)}
+            className="text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity mt-0.5"
+            title="Supprimer"
           >
-            <ImageIcon className="h-2.5 w-2.5" />
-            p.{action.screenshotPage}
+            <Trash2 className="h-3 w-3" />
           </button>
         )}
       </div>
-    </div>
-  </div>
-);
+      {/* Action screenshot modal */}
+      <Dialog open={showImg} onOpenChange={setShowImg}>
+        <DialogContent className="max-w-3xl p-2">
+          {action.screenshotUrl && <img src={action.screenshotUrl} alt="" className="w-full rounded-lg" />}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
