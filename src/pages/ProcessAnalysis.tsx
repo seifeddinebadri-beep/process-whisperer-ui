@@ -463,6 +463,31 @@ const ProcessAnalysis = () => {
 
   const approved = currentProcess?.status === "approved";
 
+  // Check if steps have no actions at all
+  const totalActions = useMemo(() => displaySteps.reduce((sum, s) => sum + (s.actions?.length || 0), 0), [displaySteps]);
+  const hasStepsButNoActions = displaySteps.length > 0 && totalActions === 0;
+
+  const [extractingActions, setExtractingActions] = useState(false);
+  const extractActionsMutation = useMutation({
+    mutationFn: async () => {
+      setExtractingActions(true);
+      const { data, error } = await supabase.functions.invoke("agent-analyze-as-is", {
+        body: { process_id: selectedProcessId, extract_actions_only: true },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: lang === "fr" ? `${data?.actions_count || 0} actions extraites` : `${data?.actions_count || 0} actions extracted` });
+      setExtractingActions(false);
+    },
+    onError: (e: any) => {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+      setExtractingActions(false);
+    },
+  });
+
   if (loadingProcesses) {
     return (
       <div className="max-w-5xl flex items-center justify-center p-12">
