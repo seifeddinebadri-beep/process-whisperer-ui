@@ -401,6 +401,62 @@ const AutomationBacklogReport = () => {
         </div>
       </div>
 
+      {/* Filter Bar */}
+      <Card>
+        <CardContent className="pt-4 pb-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input placeholder="Rechercher…" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} className="pl-8 h-9 text-sm" />
+            </div>
+            <Select value={filterImpact} onValueChange={setFilterImpact}>
+              <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue placeholder="Impact" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tout impact</SelectItem>
+                <SelectItem value="high">Élevé</SelectItem>
+                <SelectItem value="medium">Moyen</SelectItem>
+                <SelectItem value="low">Faible</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterComplexity} onValueChange={setFilterComplexity}>
+              <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Complexité" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toute complexité</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterProcess} onValueChange={setFilterProcess}>
+              <SelectTrigger className="w-[180px] h-9 text-sm"><SelectValue placeholder="Processus" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les processus</SelectItem>
+                {uniqueProcesses.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Statut" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous</SelectItem>
+                <SelectItem value="detailed">✨ Détaillé</SelectItem>
+                <SelectItem value="pdd">📄 Avec PDD</SelectItem>
+                <SelectItem value="basic">Non détaillé</SelectItem>
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-9" onClick={clearFilters}>
+                <X className="h-3 w-3 mr-1" /> Réinitialiser ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+          {activeFilterCount > 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              <Filter className="h-3 w-3 inline mr-1" />{sorted.length} / {useCases.length} opportunités affichées
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard icon={Target} label="Opportunités identifiées" value={stats.total} accent />
