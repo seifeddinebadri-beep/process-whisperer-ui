@@ -65,7 +65,31 @@ const ProcessAnalysis = () => {
         .eq("process_id", selectedProcessId)
         .order("step_order");
       if (error) throw error;
-      return data.map((s): ProcessStep => ({
+
+      // Fetch all step_actions for these steps
+      const stepIds = data.map((s: any) => s.id);
+      let actionsMap: Record<string, any[]> = {};
+      if (stepIds.length > 0) {
+        const { data: actions, error: actErr } = await supabase
+          .from("step_actions")
+          .select("*")
+          .in("step_id", stepIds)
+          .order("action_order");
+        if (!actErr && actions) {
+          for (const a of actions) {
+            if (!actionsMap[a.step_id]) actionsMap[a.step_id] = [];
+            actionsMap[a.step_id].push({
+              id: a.id,
+              description: a.description,
+              systemUsed: a.system_used || undefined,
+              screenshotPage: a.screenshot_page ?? undefined,
+              actionOrder: a.action_order,
+            });
+          }
+        }
+      }
+
+      return data.map((s: any): ProcessStep => ({
         id: s.id,
         name: s.name,
         description: s.description || "",
@@ -81,6 +105,7 @@ const ProcessAnalysis = () => {
         stepOrder: s.step_order,
         source: (s as any).source || "manual",
         screenshotUrl: (s as any).screenshot_url || undefined,
+        actions: actionsMap[s.id] || [],
       }));
     },
     enabled: !!selectedProcessId,
@@ -602,6 +627,11 @@ const ProcessAnalysis = () => {
                       onMoveUp={(idx) => handleMoveStep(idx, -1)}
                       onMoveDown={(idx) => handleMoveStep(idx, 1)}
                       hideActions={stepFilterCount > 0}
+                      onScreenshotPageClick={(page) => {
+                        // Scroll to screenshot gallery or open modal for that page
+                        const el = document.getElementById("screenshot-gallery");
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                      }}
                     />
                   ))
                 )}
@@ -638,7 +668,9 @@ const ProcessAnalysis = () => {
 
       {/* Screenshots Gallery */}
       {screenshots.length > 0 && (
-        <ScreenshotGallery screenshots={screenshots} getPublicUrl={getPublicUrl} />
+        <div id="screenshot-gallery">
+          <ScreenshotGallery screenshots={screenshots} getPublicUrl={getPublicUrl} />
+        </div>
       )}
 
       {/* Edit Step Modal */}

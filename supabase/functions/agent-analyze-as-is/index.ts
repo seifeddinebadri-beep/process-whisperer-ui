@@ -80,6 +80,9 @@ serve(async (req) => {
           "Le résumé doit expliquer ce que tu as trouvé, les lacunes doivent pointer les informations manquantes. " +
           "Si des captures d'écran sont fournies, utilise-les pour identifier des étapes visuelles, des interfaces système, et des actions utilisateur. " +
           "Pour chaque étape liée à une capture d'écran, indique le numéro de page dans screenshot_page. " +
+          "IMPORTANT: Pour chaque étape, décompose les actions granulaires observées dans le journal d'événements ou le document. " +
+          "Chaque action représente une interaction utilisateur/système spécifique (clic, saisie, validation, navigation). " +
+          "Associe chaque action au système utilisé et à la page de capture d'écran correspondante quand disponible. " +
           "Retourne UNIQUEMENT via l'appel de fonction fourni.\n\n" +
           "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
           "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le document ou les captures d'écran.\n" +
@@ -185,6 +188,20 @@ serve(async (req) => {
                         frequency: { type: "string" },
                         volume_estimate: { type: "string" },
                         screenshot_page: { type: "number", description: "Numéro de page PDF correspondant à cette étape" },
+                        actions: {
+                          type: "array",
+                          description: "Liste des actions granulaires observées dans le journal d'événements pour cette étape",
+                          items: {
+                            type: "object",
+                            properties: {
+                              description: { type: "string", description: "Description détaillée de l'action utilisateur/système" },
+                              system_used: { type: "string", description: "Système ou application utilisé pour cette action" },
+                              screenshot_page: { type: "number", description: "Numéro de page PDF correspondant à cette action" },
+                            },
+                            required: ["description"],
+                            additionalProperties: false,
+                          },
+                        },
                       },
                       required: ["name", "description"],
                       additionalProperties: false,
@@ -228,6 +245,7 @@ serve(async (req) => {
     const { context, steps, agent_summary, confidence, gaps_identified } = JSON.parse(toolCall.function.arguments);
 
     // Delete existing data
+    await supabase.from("step_actions").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // clear all first via step cascade
     await supabase.from("process_steps").delete().eq("process_id", process_id);
     await supabase.from("process_context").delete().eq("process_id", process_id);
     await supabase.from("process_screenshots").delete().eq("process_id", process_id);
@@ -255,28 +273,48 @@ serve(async (req) => {
       });
     }
 
-    // Insert steps
+    // Insert steps and their actions
     if (steps && Array.isArray(steps)) {
-      const stepInserts = steps.map((s: any, idx: number) => ({
-        process_id,
-        step_order: idx,
-        name: s.name,
-        description: s.description || null,
-        role: s.role || null,
-        tool_used: s.tool_used || null,
-        decision_type: s.decision_type || null,
-        data_inputs: s.data_inputs?.length ? s.data_inputs : null,
-        data_outputs: s.data_outputs?.length ? s.data_outputs : null,
-        pain_points: s.pain_points || null,
-        business_rules: s.business_rules || null,
-        frequency: s.frequency || null,
-        volume_estimate: s.volume_estimate || null,
-        source: "agent_analyst",
-        screenshot_url: s.screenshot_page != null && pdf_path
-          ? `page:${s.screenshot_page}`
-          : null,
-      }));
-      await supabase.from("process_steps").insert(stepInserts);
+      for (let idx = 0; idx < steps.length; idx++) {
+        const s = steps[idx];
+        const { data: insertedStep, error: stepErr } = await supabase.from("process_steps").insert({
+          process_id,
+          step_order: idx,
+          name: s.name,
+          description: s.description || null,
+          role: s.role || null,
+          tool_used: s.tool_used || null,
+          decision_type: s.decision_type || null,
+          data_inputs: s.data_inputs?.length ? s.data_inputs : null,
+          data_outputs: s.data_outputs?.length ? s.data_outputs : null,
+          pain_points: s.pain_points || null,
+          business_rules: s.business_rules || null,
+          frequency: s.frequency || null,
+          volume_estimate: s.volume_estimate || null,
+          source: "agent_analyst",
+          screenshot_url: s.screenshot_page != null && pdf_path
+            ? `page:${s.screenshot_page}`
+            : null,
+        }).select("id").single();
+
+        if (stepErr || !insertedStep) {
+          console.error("Step insert error:", stepErr);
+          continue;
+        }
+
+        // Insert actions for this step
+        if (s.actions && Array.isArray(s.actions) && s.actions.length > 0) {
+          const actionInserts = s.actions.map((a: any, aIdx: number) => ({
+            step_id: insertedStep.id,
+            action_order: aIdx,
+            description: a.description,
+            system_used: a.system_used || null,
+            screenshot_page: a.screenshot_page ?? null,
+          }));
+          const { error: actErr } = await supabase.from("step_actions").insert(actionInserts);
+          if (actErr) console.error("Actions insert error:", actErr);
+        }
+      }
     }
 
     // Update process status

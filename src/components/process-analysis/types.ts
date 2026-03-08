@@ -18,6 +18,15 @@ export interface ProcessStep {
   stepOrder?: number;
   source?: StepSource;
   screenshotUrl?: string;
+  actions?: StepAction[];
+}
+
+export interface StepAction {
+  id: string;
+  description: string;
+  systemUsed?: string;
+  screenshotPage?: number;
+  actionOrder?: number;
 }
 
 export interface ProcessScreenshot {
