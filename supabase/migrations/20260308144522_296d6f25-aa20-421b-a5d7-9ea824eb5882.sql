@@ -1,0 +1,1 @@
+ALTER TABLE public.step_actions ADD COLUMN screenshot_url TEXT;
