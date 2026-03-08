@@ -111,6 +111,8 @@ export const translations = {
       selectDept: "Sélectionner un département",
       selectEntity: "Sélectionner une entité",
       selectActivity: "Sélectionner une activité",
+      selectService: "Sélectionner un service",
+      service: "Service",
       fileUploaded: "Fichier téléversé",
       contextAssigned: "Contexte assigné",
       readyForAnalysis: "Le processus est prêt pour l'analyse.",
