@@ -152,9 +152,16 @@ const AutomationDiscovery = () => {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">{t.discovery.title}</h2>
-        <p className="text-sm text-muted-foreground">{t.discovery.subtitle}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">{t.discovery.title}</h2>
+          <p className="text-sm text-muted-foreground">{t.discovery.subtitle}</p>
+        </div>
+        {useCases.length > 0 && (
+          <Button variant="outline" size="sm" onClick={() => navigate("/automation-discovery/report")}>
+            <BarChart3 className="h-3.5 w-3.5 mr-1" /> Générer le rapport
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

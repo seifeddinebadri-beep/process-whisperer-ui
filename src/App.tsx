@@ -30,6 +30,7 @@ const App = () => (
               <Route path="/process-upload" element={<ProcessUpload />} />
               <Route path="/process-analysis" element={<ProcessAnalysis />} />
               <Route path="/automation-discovery" element={<AutomationDiscovery />} />
+              <Route path="/automation-discovery/report" element={<AutomationBacklogReport />} />
               <Route path="/automation-discovery/:id" element={<UseCaseDetail />} />
             </Route>
             <Route path="*" element={<NotFound />} />
