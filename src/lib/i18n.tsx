@@ -460,6 +460,9 @@ export const translations = {
       fileUploaded: "File uploaded",
       contextAssigned: "Context assigned",
       readyForAnalysis: "Process is ready for analysis.",
+      pdfAttachment: "Visual Documentation (PDF)",
+      pdfDropHere: "Attach a PDF with process screenshots",
+      pdfAttached: "PDF attached",
     },
 
     analysis: {
