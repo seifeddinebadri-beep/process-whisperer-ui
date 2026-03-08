@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter, ImageIcon } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter, ImageIcon, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -16,7 +16,7 @@ import { EditableBadges } from "@/components/process-analysis/EditableBadges";
 import { StepComparisonView } from "@/components/process-analysis/StepComparisonView";
 import { useLang } from "@/lib/i18n";
 import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
-import type { ProcessStep, ProcessContext, ProcessScreenshot } from "@/components/process-analysis/types";
+import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
@@ -85,6 +85,7 @@ const ProcessAnalysis = () => {
               systemUsed: a.system_used || undefined,
               screenshotPage: a.screenshot_page ?? undefined,
               actionOrder: a.action_order,
+              screenshotUrl: (a as any).screenshot_url || undefined,
             });
           }
         }
@@ -251,6 +252,98 @@ const ProcessAnalysis = () => {
       queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
     },
   });
+
+  // === Action CRUD Mutations ===
+
+  const updateActionMutation = useMutation({
+    mutationFn: async (action: StepAction) => {
+      const { error } = await supabase
+        .from("step_actions")
+        .update({ description: action.description, system_used: action.systemUsed || null, screenshot_url: action.screenshotUrl || null } as any)
+        .eq("id", action.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] }),
+  });
+
+  const deleteActionMutation = useMutation({
+    mutationFn: async (actionId: string) => {
+      const { error } = await supabase.from("step_actions").delete().eq("id", actionId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] }),
+  });
+
+  const addActionMutation = useMutation({
+    mutationFn: async (stepId: string) => {
+      // Get current max action_order for this step
+      const { data: existing } = await supabase
+        .from("step_actions")
+        .select("action_order")
+        .eq("step_id", stepId)
+        .order("action_order", { ascending: false })
+        .limit(1);
+      const nextOrder = (existing?.[0]?.action_order ?? -1) + 1;
+      const { error } = await supabase.from("step_actions").insert({
+        step_id: stepId,
+        description: "Nouvelle action",
+        action_order: nextOrder,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] }),
+  });
+
+  const uploadScreenshot = async (bucket: string, path: string, file: File): Promise<string> => {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const handleUploadStepScreenshot = async (stepId: string, file: File) => {
+    try {
+      const path = `screenshots/steps/${stepId}/${file.name}`;
+      const url = await uploadScreenshot("process-files", path, file);
+      await supabase.from("process_steps").update({ screenshot_url: url }).eq("id", stepId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot ajouté" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteStepScreenshot = async (stepId: string) => {
+    try {
+      await supabase.from("process_steps").update({ screenshot_url: null }).eq("id", stepId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot supprimé" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleUploadActionScreenshot = async (actionId: string, file: File) => {
+    try {
+      const path = `screenshots/actions/${actionId}/${file.name}`;
+      const url = await uploadScreenshot("process-files", path, file);
+      await supabase.from("step_actions").update({ screenshot_url: url } as any).eq("id", actionId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot ajouté" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteActionScreenshot = async (actionId: string) => {
+    try {
+      await supabase.from("step_actions").update({ screenshot_url: null } as any).eq("id", actionId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot supprimé" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
 
   const updateContextMutation = useMutation({
     mutationFn: async (ctx: ProcessContext) => {
@@ -656,10 +749,16 @@ const ProcessAnalysis = () => {
                       onMoveDown={(idx) => handleMoveStep(idx, 1)}
                       hideActions={stepFilterCount > 0}
                       onScreenshotPageClick={(page) => {
-                        // Scroll to screenshot gallery or open modal for that page
                         const el = document.getElementById("screenshot-gallery");
                         if (el) el.scrollIntoView({ behavior: "smooth" });
                       }}
+                      onUpdateAction={(action) => updateActionMutation.mutate(action)}
+                      onDeleteAction={(actionId) => deleteActionMutation.mutate(actionId)}
+                      onAddAction={(stepId) => addActionMutation.mutate(stepId)}
+                      onUploadStepScreenshot={handleUploadStepScreenshot}
+                      onDeleteStepScreenshot={handleDeleteStepScreenshot}
+                      onUploadActionScreenshot={handleUploadActionScreenshot}
+                      onDeleteActionScreenshot={handleDeleteActionScreenshot}
                     />
                   ))
                 )}

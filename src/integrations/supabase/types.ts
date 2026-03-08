@@ -678,6 +678,7 @@ export type Database = {
           description: string
           id: string
           screenshot_page: number | null
+          screenshot_url: string | null
           step_id: string
           system_used: string | null
         }
@@ -687,6 +688,7 @@ export type Database = {
           description: string
           id?: string
           screenshot_page?: number | null
+          screenshot_url?: string | null
           step_id: string
           system_used?: string | null
         }
@@ -696,6 +698,7 @@ export type Database = {
           description?: string
           id?: string
           screenshot_page?: number | null
+          screenshot_url?: string | null
           step_id?: string
           system_used?: string | null
         }

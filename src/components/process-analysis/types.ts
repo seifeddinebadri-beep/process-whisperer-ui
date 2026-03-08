@@ -27,6 +27,7 @@ export interface StepAction {
   systemUsed?: string;
   screenshotPage?: number;
   actionOrder?: number;
+  screenshotUrl?: string;
 }
 
 export interface ProcessScreenshot {
