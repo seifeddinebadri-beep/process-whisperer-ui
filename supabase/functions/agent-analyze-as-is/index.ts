@@ -193,22 +193,74 @@ serve(async (req) => {
       .order("chunk_index");
 
     if (chunksError) throw new Error(`Failed to fetch chunks: ${chunksError.message}`);
-    if (!chunks || chunks.length === 0) {
+
+    let fullText: string;
+
+    if (chunks && chunks.length > 0) {
       await supabase.from("agent_logs").insert({
-        process_id, agent_name: "analyst", action: "analyze_as_is", status: "error",
-        message: "No document chunks found for this process.",
+        process_id, agent_name: "analyst", action: "analyze_as_is", status: "started",
+        message: `Reading ${chunks.length} document chunks${pdf_path ? " + PDF screenshots" : ""}...`,
       });
-      return new Response(JSON.stringify({ error: "No document chunks found." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      fullText = chunks.map((c: any) => c.content).join("\n\n");
+    } else {
+      // Fallback: build text from existing process steps & context
+      await supabase.from("agent_logs").insert({
+        process_id, agent_name: "analyst", action: "analyze_as_is", status: "started",
+        message: "No document chunks found — falling back to process steps and context...",
       });
+
+      const { data: fallbackSteps } = await supabase
+        .from("process_steps")
+        .select("*")
+        .eq("process_id", process_id)
+        .order("step_order");
+
+      const { data: fallbackCtx } = await supabase
+        .from("process_context")
+        .select("*")
+        .eq("process_id", process_id)
+        .maybeSingle();
+
+      const { data: processRecord } = await supabase
+        .from("uploaded_processes")
+        .select("file_name, notes")
+        .eq("id", process_id)
+        .single();
+
+      const parts: string[] = [];
+      if (processRecord) {
+        parts.push(`Processus : ${processRecord.file_name}`);
+        if (processRecord.notes) parts.push(`Notes : ${processRecord.notes}`);
+      }
+      if (fallbackCtx) {
+        parts.push(`Objectif : ${fallbackCtx.process_objective || "N/A"}`);
+        parts.push(`Contraintes : ${fallbackCtx.known_constraints || "N/A"}`);
+        parts.push(`Points de douleur : ${fallbackCtx.pain_points_summary || "N/A"}`);
+        parts.push(`Volume et fréquence : ${fallbackCtx.volume_and_frequency || "N/A"}`);
+        parts.push(`Hypothèses : ${fallbackCtx.assumptions || "N/A"}`);
+        parts.push(`Notes parties prenantes : ${fallbackCtx.stakeholder_notes || "N/A"}`);
+      }
+      if (fallbackSteps && fallbackSteps.length > 0) {
+        parts.push("\n--- Étapes du processus ---");
+        for (const s of fallbackSteps) {
+          parts.push(
+            `Étape ${s.step_order}: ${s.name}\nDescription: ${s.description || "N/A"}\n` +
+            `Rôle: ${s.role || "N/A"}\nOutil: ${s.tool_used || "N/A"}`
+          );
+        }
+      }
+
+      fullText = parts.join("\n");
+      if (!fullText.trim()) {
+        await supabase.from("agent_logs").insert({
+          process_id, agent_name: "analyst", action: "analyze_as_is", status: "error",
+          message: "No data available: no chunks, no steps, no context.",
+        });
+        return new Response(JSON.stringify({ error: "No data available for analysis." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
-
-    await supabase.from("agent_logs").insert({
-      process_id, agent_name: "analyst", action: "analyze_as_is", status: "started",
-      message: `Reading ${chunks.length} document chunks${pdf_path ? " + PDF screenshots" : ""}...`,
-    });
-
-    const fullText = chunks.map((c: any) => c.content).join("\n\n");
 
     // Build multimodal messages
     const messages: any[] = [
