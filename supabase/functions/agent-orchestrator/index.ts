@@ -105,7 +105,7 @@ serve(async (req) => {
     }
 
     // ===== PHASE 2: Clarifier =====
-    await log(supabase, process_id, "phase_clarifier", "started", "Phase 2/4 — Clarifier: generating and auto-answering questions...");
+    await log(supabase, process_id, "phase_clarifier", "started", "Phase 2/5 — Clarifier: generating and auto-answering questions...");
 
     let questionsAnswered = 0;
     try {
