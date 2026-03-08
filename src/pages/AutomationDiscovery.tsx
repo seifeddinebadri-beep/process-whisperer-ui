@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X, FileText, ArrowUpDown, Clock } from "lucide-react";
+import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X, FileText, ArrowUpDown, Clock, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useQueryClient } from "@tanstack/react-query";
@@ -152,9 +152,16 @@ const AutomationDiscovery = () => {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">{t.discovery.title}</h2>
-        <p className="text-sm text-muted-foreground">{t.discovery.subtitle}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">{t.discovery.title}</h2>
+          <p className="text-sm text-muted-foreground">{t.discovery.subtitle}</p>
+        </div>
+        {useCases.length > 0 && (
+          <Button variant="outline" size="sm" onClick={() => navigate("/automation-discovery/report")}>
+            <BarChart3 className="h-3.5 w-3.5 mr-1" /> Générer le rapport
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

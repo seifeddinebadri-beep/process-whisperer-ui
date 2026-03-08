@@ -1,46 +1,97 @@
 
 
-## Plan: Automation Discovery Backlog Report Page with CSV & PDF Export
+## Plan: Rename KB hierarchy, add delete, add document upload
 
-### Overview
-Create a new dedicated report page (`/automation-discovery/report`) that presents a full backlog report of all automation opportunities with rich detail sections and export capabilities (CSV + PDF).
+### 1. Rename hierarchy labels (i18n only, no DB changes)
 
-### New Page: `src/pages/AutomationBacklogReport.tsx`
+Update `src/lib/i18n.tsx` — the KB section labels:
+- "Companies" stays as top level (unchanged)
+- Current "Departments" → **"Départements"** (stays same in FR, already correct)
+- Current "Entities" → **"Entités"** (stays same)  
+- Current "Activities" → **"Activités"** (stays same)
 
-**Data fetched** (all in parallel via react-query):
-- `automation_use_cases` with joined `uploaded_processes`, `automation_variants`
-- `use_case_details` for all use cases
-- `ba_conversations` count per use case (PDD status)
+Wait — re-reading the user request: "Department -> Entity -> Activity -> Service". This means the hierarchy levels should be renamed:
+- Level 1 (was "Department") → **"Département"** (no change)
+- Level 2 (was "Entity") → **"Entité"** (no change)  
+- Level 3 (was "Activity") → **"Activité"** (no change)
+- Level 4 → **"Service"** (NEW level, or rename Activity to Service?)
 
-**Report sections:**
-1. **Executive Summary** — total use cases, breakdown by impact (high/medium/low), breakdown by complexity, total variants count, processes covered
-2. **Priority Matrix** — table sorted by impact desc, showing all use cases with: title, process, impact, complexity, ROI, variants count, tools, has detail, has PDD
-3. **Per Use Case Detail Cards** — for each use case (sorted by impact):
-   - Title, description, impact/complexity/ROI badges
-   - Linked process name
-   - Tools suggested
-   - Variants summary table (name, complexity, impact, cost, timeline, recommended)
-   - Detail content sections if available (detection signals, scope, comparison)
-4. **Tools & Technology Summary** — aggregated list of all tools across all use cases with frequency count
+Actually, the user says "rename it": the current hierarchy under a company is Department > Entity > Activity. The user wants it labeled as **Department > Entity > Activity > Service**. This adds a new level "Service" under Activity, OR renames the existing levels.
 
-**Export: CSV**
-- Client-side generation using `Blob` + `URL.createObjectURL`
-- Columns: Title, Description, Process, Impact, Complexity, ROI, Tools, Variants Count, Has Detail, Has PDD, Created At
-- One row per use case; second CSV option with one row per variant
+Given the DB structure (departments → entities → activities), the simplest interpretation is renaming the labels:
+- What was "Department" → **"Département"** (same)
+- What was "Entity" → **"Entité"** (same)  
+- What was "Activity" → **"Activité"** (same)
 
-**Export: PDF**
-- Reuse the HTML-to-print approach already used in `UseCaseDetail`
-- Build a full HTML document client-side with all report data (similar to `generate-variant-pdf` style but covering all use cases)
-- Open in new window and trigger `window.print()`
+But that's 3 levels, and the user listed 4. I think the user wants to rename the 3 existing sub-levels under Company:
+- "Departments" → **"Department"** 
+- "Entities" → **"Entity"**
+- "Activities" → **"Activity"**
 
-### Route Addition: `src/App.tsx`
-- Add route `/automation-discovery/report` pointing to new page
+And add a 4th level: **"Service"** under Activity.
 
-### Navigation
-- Add "Générer le rapport" button on `AutomationDiscovery.tsx` page header linking to the report page
+OR the user wants to rename the 3 levels as: Department, Entity, Activity, Service — meaning rename what was "Activity" to "Service" and add "Activity" as a middle level. That would require a new DB table.
 
-### Files to create/edit
-1. **Create** `src/pages/AutomationBacklogReport.tsx` — full report page
-2. **Edit** `src/App.tsx` — add route
-3. **Edit** `src/pages/AutomationDiscovery.tsx` — add report button in header
+**Simplest interpretation**: Rename the 3 existing levels to match the user's naming, and the last one "Service" replaces "Activity" label. So:
+- Level 1: Department (same)
+- Level 2: Entity (same)  
+- Level 3: Activity (same — currently "Entity" in DB)
+- Level 4: Service (currently "Activity" in DB, renamed to "Service")
+
+Actually, I think the user just wants the labels to be exactly: **Department → Entity → Activity → Service**. Since there are currently only 3 levels under Company (Department, Entity, Activity), this means adding a **4th level: Service** under Activity. This requires a new DB table `services`.
+
+Let me go with the most practical interpretation: **add a new "Service" level under Activity**, requiring a new `services` table.
+
+### Changes
+
+**A. Database migration — create `services` table**
+```sql
+CREATE TABLE public.services (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  activity_id uuid NOT NULL REFERENCES public.activities(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  description text,
+  business_objective text,
+  documentation text[]
+);
+ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
+-- RLS policies (public access like other KB tables)
+CREATE POLICY "Allow public read services" ON public.services FOR SELECT USING (true);
+CREATE POLICY "Allow public insert services" ON public.services FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public delete services" ON public.services FOR DELETE USING (true);
+CREATE POLICY "Allow public update services" ON public.services FOR UPDATE USING (true);
+```
+
+Also create a `kb_documents` table for uploaded documents at any level:
+```sql
+CREATE TABLE public.kb_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  file_name text NOT NULL,
+  file_path text NOT NULL,
+  entity_type text NOT NULL, -- 'company','department','entity','activity','service'
+  entity_id uuid NOT NULL,
+  uploaded_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.kb_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read kb_documents" ON public.kb_documents FOR SELECT USING (true);
+CREATE POLICY "Allow public insert kb_documents" ON public.kb_documents FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public delete kb_documents" ON public.kb_documents FOR DELETE USING (true);
+```
+
+**B. Update `src/lib/i18n.tsx`**
+- Add new KB translations for Service level: `services`, `addService`, `serviceName`, `serviceAdded`, `addNewService`, `serviceDetails`
+- Add delete-related translations: `confirmDelete`, `deleted`
+- Add document upload translations: `uploadDocument`, `documentUploaded`
+
+**C. Update `src/pages/KnowledgeBase.tsx`**
+1. **Add Service level**: New view "services", queries, mutations, navigation, cards — following the same pattern as activities
+2. **Add delete buttons** on each card (company, department, entity, activity, service) with confirmation dialog. Each delete calls `supabase.from("tableName").delete().eq("id", id)` and invalidates queries.
+3. **Add document upload**: A file input + upload button on each level's view. Files uploaded to the `process-files` bucket under a path like `kb/{entity_type}/{entity_id}/{filename}`. Record saved in `kb_documents` table. Display uploaded documents as badges with delete option.
+
+**D. Update Activity view**: Currently clicking an Activity opens a detail Sheet. Now clicking an Activity navigates to the Services list (new level). The detail sheet moves to Service level.
+
+### File changes summary
+- **Migration**: 1 new migration (services table + kb_documents table)
+- `src/lib/i18n.tsx`: Add service + delete + upload translations
+- `src/pages/KnowledgeBase.tsx`: Add services level, delete buttons on all levels, document upload UI
 

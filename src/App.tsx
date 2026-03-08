@@ -10,6 +10,7 @@ import KnowledgeBase from "./pages/KnowledgeBase";
 import ProcessUpload from "./pages/ProcessUpload";
 import ProcessAnalysis from "./pages/ProcessAnalysis";
 import AutomationDiscovery from "./pages/AutomationDiscovery";
+import AutomationBacklogReport from "./pages/AutomationBacklogReport";
 import UseCaseDetail from "./pages/UseCaseDetail";
 import NotFound from "./pages/NotFound";
 
@@ -29,6 +30,7 @@ const App = () => (
               <Route path="/process-upload" element={<ProcessUpload />} />
               <Route path="/process-analysis" element={<ProcessAnalysis />} />
               <Route path="/automation-discovery" element={<AutomationDiscovery />} />
+              <Route path="/automation-discovery/report" element={<AutomationBacklogReport />} />
               <Route path="/automation-discovery/:id" element={<UseCaseDetail />} />
             </Route>
             <Route path="*" element={<NotFound />} />
