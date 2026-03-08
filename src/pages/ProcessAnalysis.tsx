@@ -80,6 +80,7 @@ const ProcessAnalysis = () => {
         volumeEstimate: s.volume_estimate || "",
         stepOrder: s.step_order,
         source: (s as any).source || "manual",
+        screenshotUrl: (s as any).screenshot_url || undefined,
       }));
     },
     enabled: !!selectedProcessId,
