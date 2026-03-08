@@ -635,6 +635,11 @@ const ProcessAnalysis = () => {
         </CardContent>
       </Card>
 
+      {/* Screenshots Gallery */}
+      {screenshots.length > 0 && (
+        <ScreenshotGallery screenshots={screenshots} getPublicUrl={getPublicUrl} />
+      )}
+
       {/* Edit Step Modal */}
       <StepEditModal
         step={editingStep}
