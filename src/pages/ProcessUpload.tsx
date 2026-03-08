@@ -255,7 +255,7 @@ const ProcessUpload = () => {
       toast({ title: t.upload.contextAssigned, description: t.upload.readyForAnalysis });
       queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
       queryClient.invalidateQueries({ queryKey: ["overview-processes"] });
-      setSelectedFile(null); setSelectedCompany(""); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity("");
+      setSelectedFile(null); setSelectedCompany(""); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity(""); setSelectedService("");
       setNotes(""); setSelectedPdf(null); setUploading(false);
     },
     onError: (error) => {
