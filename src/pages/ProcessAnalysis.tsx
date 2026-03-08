@@ -244,15 +244,28 @@ const ProcessAnalysis = () => {
     },
   });
 
-  const reorderMutation = useMutation({
-    mutationFn: async ({ index, direction }: { index: number; direction: -1 | 1 }) => {
-      const target = index + direction;
-      const stepA = steps[index];
-      const stepB = steps[target];
-      const { error: e1 } = await supabase.from("process_steps").update({ step_order: stepB.stepOrder }).eq("id", stepA.id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase.from("process_steps").update({ step_order: stepA.stepOrder }).eq("id", stepB.id);
-      if (e2) throw e2;
+  const reorderStepsMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const updates = orderedIds.map((id, idx) =>
+        supabase.from("process_steps").update({ step_order: idx }).eq("id", id)
+      );
+      const results = await Promise.all(updates);
+      const err = results.find(r => r.error);
+      if (err?.error) throw err.error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+    },
+  });
+
+  const reorderActionsMutation = useMutation({
+    mutationFn: async ({ actionIds }: { stepId: string; actionIds: string[] }) => {
+      const updates = actionIds.map((id, idx) =>
+        supabase.from("step_actions").update({ action_order: idx }).eq("id", id)
+      );
+      const results = await Promise.all(updates);
+      const err = results.find(r => r.error);
+      if (err?.error) throw err.error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
