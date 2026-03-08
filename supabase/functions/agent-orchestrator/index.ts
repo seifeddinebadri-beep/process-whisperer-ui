@@ -142,8 +142,25 @@ serve(async (req) => {
     // Embeddings are generated during upload flow. The analyst has a fallback if none exist.
     // Skipping here to avoid 504 timeouts from edge function time limits.
 
+    // ===== PHASE 0c: KB Context retrieval (handled inside analyst agent) =====
+    await log(supabase, process_id, "phase_kb_context", "started", "Phase 0c/5 — Retrieving Knowledge Base context for organizational grounding...");
+    try {
+      const { data: proc } = await supabase
+        .from("uploaded_processes")
+        .select("company_id, department_id, entity_id, activity_id")
+        .eq("id", process_id)
+        .single();
+      const hasKb = !!(proc?.company_id || proc?.department_id || proc?.entity_id || proc?.activity_id);
+      await log(supabase, process_id, "phase_kb_context", "completed",
+        hasKb ? "KB context found — will be injected into analyst prompt." : "No KB context assigned to this process.",
+        { has_company: !!proc?.company_id, has_activity: !!proc?.activity_id }
+      );
+    } catch (e) {
+      await log(supabase, process_id, "phase_kb_context", "warning", `KB context check failed: ${(e as Error).message}`);
+    }
+
     // ===== PHASE 1: Analyst =====
-    await log(supabase, process_id, "phase_analyst", "started", "Phase 1/5 — Analyst: extracting process steps and context...");
+    await log(supabase, process_id, "phase_analyst", "started", "Phase 1/5 — Analyst: extracting process steps and context (with KB grounding)...");
     
     let analystResult: any;
     try {
