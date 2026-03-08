@@ -80,6 +80,9 @@ serve(async (req) => {
           "Le résumé doit expliquer ce que tu as trouvé, les lacunes doivent pointer les informations manquantes. " +
           "Si des captures d'écran sont fournies, utilise-les pour identifier des étapes visuelles, des interfaces système, et des actions utilisateur. " +
           "Pour chaque étape liée à une capture d'écran, indique le numéro de page dans screenshot_page. " +
+          "IMPORTANT: Pour chaque étape, décompose les actions granulaires observées dans le journal d'événements ou le document. " +
+          "Chaque action représente une interaction utilisateur/système spécifique (clic, saisie, validation, navigation). " +
+          "Associe chaque action au système utilisé et à la page de capture d'écran correspondante quand disponible. " +
           "Retourne UNIQUEMENT via l'appel de fonction fourni.\n\n" +
           "RÈGLES ANTI-HALLUCINATION (STRICTES) :\n" +
           "- Tu ne dois JAMAIS inventer d'informations qui ne sont pas présentes dans le document ou les captures d'écran.\n" +
