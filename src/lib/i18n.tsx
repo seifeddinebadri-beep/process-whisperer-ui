@@ -487,6 +487,7 @@ export const translations = {
       noScreenshots: "No screenshots available for this process.",
       viewScreenshot: "View screenshot",
       page: "Page",
+      detailedActions: "detailed actions",
     },
 
     stepModal: {

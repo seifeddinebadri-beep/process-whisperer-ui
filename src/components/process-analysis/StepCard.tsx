@@ -3,8 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Edit2, Trash2, ChevronUp, ChevronDown, ImageIcon } from "lucide-react";
-import type { ProcessStep, StepSource } from "./types";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Edit2, Trash2, ChevronUp, ChevronDown, ImageIcon, ChevronRight, Monitor } from "lucide-react";
+import type { ProcessStep, StepSource, StepAction } from "./types";
 
 interface StepCardProps {
   step: ProcessStep;
@@ -16,6 +17,7 @@ interface StepCardProps {
   onMoveDown: (index: number) => void;
   hideActions?: boolean;
   screenshotUrl?: string;
+  onScreenshotPageClick?: (page: number) => void;
 }
 
 const decisionLabels: Record<string, string> = {
@@ -31,9 +33,11 @@ const sourceConfig: Record<StepSource, { label: string; className: string }> = {
   merged: { label: "Merged", className: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
 };
 
-export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl }: StepCardProps) => {
+export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown, hideActions, screenshotUrl, onScreenshotPageClick }: StepCardProps) => {
   const [showScreenshot, setShowScreenshot] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const imgUrl = screenshotUrl || step.screenshotUrl;
+  const actions = step.actions || [];
 
   return (
     <>
@@ -87,6 +91,30 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
                 {step.businessRules && (
                   <p className="text-[11px] text-muted-foreground mt-0.5">📋 {step.businessRules}</p>
                 )}
+
+                {/* Collapsible Actions */}
+                {actions.length > 0 && (
+                  <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
+                    <CollapsibleTrigger asChild>
+                      <button className="flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline">
+                        <ChevronRight className={`h-3 w-3 transition-transform ${actionsOpen ? "rotate-90" : ""}`} />
+                        {actions.length} action{actions.length > 1 ? "s" : ""} détaillée{actions.length > 1 ? "s" : ""}
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-2 ml-1 space-y-1.5 border-l-2 border-primary/20 pl-3">
+                        {actions.map((action, aIdx) => (
+                          <ActionItem
+                            key={action.id || aIdx}
+                            action={action}
+                            index={aIdx}
+                            onScreenshotPageClick={onScreenshotPageClick}
+                          />
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
               </div>
             </div>
             {!hideActions && (
@@ -118,3 +146,29 @@ export const StepCard = ({ step, index, total, onEdit, onDelete, onMoveUp, onMov
     </>
   );
 };
+
+const ActionItem = ({ action, index, onScreenshotPageClick }: { action: StepAction; index: number; onScreenshotPageClick?: (page: number) => void }) => (
+  <div className="flex items-start gap-2 text-[11px]">
+    <span className="font-mono text-muted-foreground mt-0.5 w-4 shrink-0">{index + 1}.</span>
+    <div className="flex-1 min-w-0">
+      <span className="text-foreground">{action.description}</span>
+      <div className="flex items-center gap-1.5 mt-0.5">
+        {action.systemUsed && (
+          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+            <Monitor className="h-2.5 w-2.5 mr-0.5" />
+            {action.systemUsed}
+          </Badge>
+        )}
+        {action.screenshotPage != null && (
+          <button
+            onClick={() => onScreenshotPageClick?.(action.screenshotPage!)}
+            className="flex items-center gap-0.5 text-[9px] text-primary hover:underline"
+          >
+            <ImageIcon className="h-2.5 w-2.5" />
+            p.{action.screenshotPage}
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+);

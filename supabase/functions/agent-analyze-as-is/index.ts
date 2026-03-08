@@ -273,28 +273,48 @@ serve(async (req) => {
       });
     }
 
-    // Insert steps
+    // Insert steps and their actions
     if (steps && Array.isArray(steps)) {
-      const stepInserts = steps.map((s: any, idx: number) => ({
-        process_id,
-        step_order: idx,
-        name: s.name,
-        description: s.description || null,
-        role: s.role || null,
-        tool_used: s.tool_used || null,
-        decision_type: s.decision_type || null,
-        data_inputs: s.data_inputs?.length ? s.data_inputs : null,
-        data_outputs: s.data_outputs?.length ? s.data_outputs : null,
-        pain_points: s.pain_points || null,
-        business_rules: s.business_rules || null,
-        frequency: s.frequency || null,
-        volume_estimate: s.volume_estimate || null,
-        source: "agent_analyst",
-        screenshot_url: s.screenshot_page != null && pdf_path
-          ? `page:${s.screenshot_page}`
-          : null,
-      }));
-      await supabase.from("process_steps").insert(stepInserts);
+      for (let idx = 0; idx < steps.length; idx++) {
+        const s = steps[idx];
+        const { data: insertedStep, error: stepErr } = await supabase.from("process_steps").insert({
+          process_id,
+          step_order: idx,
+          name: s.name,
+          description: s.description || null,
+          role: s.role || null,
+          tool_used: s.tool_used || null,
+          decision_type: s.decision_type || null,
+          data_inputs: s.data_inputs?.length ? s.data_inputs : null,
+          data_outputs: s.data_outputs?.length ? s.data_outputs : null,
+          pain_points: s.pain_points || null,
+          business_rules: s.business_rules || null,
+          frequency: s.frequency || null,
+          volume_estimate: s.volume_estimate || null,
+          source: "agent_analyst",
+          screenshot_url: s.screenshot_page != null && pdf_path
+            ? `page:${s.screenshot_page}`
+            : null,
+        }).select("id").single();
+
+        if (stepErr || !insertedStep) {
+          console.error("Step insert error:", stepErr);
+          continue;
+        }
+
+        // Insert actions for this step
+        if (s.actions && Array.isArray(s.actions) && s.actions.length > 0) {
+          const actionInserts = s.actions.map((a: any, aIdx: number) => ({
+            step_id: insertedStep.id,
+            action_order: aIdx,
+            description: a.description,
+            system_used: a.system_used || null,
+            screenshot_page: a.screenshot_page ?? null,
+          }));
+          const { error: actErr } = await supabase.from("step_actions").insert(actionInserts);
+          if (actErr) console.error("Actions insert error:", actErr);
+        }
+      }
     }
 
     // Update process status
