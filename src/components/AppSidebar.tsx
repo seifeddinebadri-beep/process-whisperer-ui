@@ -1,4 +1,4 @@
-import { LayoutDashboard, Building2, Upload, GitBranch, Lightbulb, Globe } from "lucide-react";
+import { LayoutDashboard, Building2, Upload, GitBranch, Lightbulb, Globe, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useLang } from "@/lib/i18n";
@@ -44,6 +44,7 @@ export function AppSidebar() {
     { title: t.nav.processUpload, url: "/process-upload", icon: Upload },
     { title: t.nav.processAnalysis, url: "/process-analysis", icon: GitBranch },
     { title: t.nav.automationDiscovery, url: "/automation-discovery", icon: Lightbulb },
+    { title: "Rapport Backlog", url: "/automation-discovery/report", icon: BarChart3 },
   ];
 
   const activeIndex = (() => {
