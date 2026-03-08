@@ -55,6 +55,36 @@ serve(async (req) => {
       });
     }
 
+    // ===== Concurrency guard =====
+    const { data: activeRuns } = await supabase
+      .from("agent_logs")
+      .select("id, created_at")
+      .eq("process_id", process_id)
+      .eq("agent_name", "orchestrator")
+      .eq("action", "orchestrate")
+      .eq("status", "started")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (activeRuns && activeRuns.length > 0) {
+      // Check if there's a matching completed/error entry after the started one
+      const { data: endEntries } = await supabase
+        .from("agent_logs")
+        .select("id")
+        .eq("process_id", process_id)
+        .eq("agent_name", "orchestrator")
+        .eq("action", "orchestrate")
+        .in("status", ["completed", "error"])
+        .gte("created_at", activeRuns[0].created_at)
+        .limit(1);
+
+      if (!endEntries || endEntries.length === 0) {
+        return new Response(JSON.stringify({ error: "Pipeline already running for this process. Please wait for it to finish." }), {
+          status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     await log(supabase, process_id, "orchestrate", "started", "Orchestrator started — launching full analysis pipeline...");
 
     // ===== Check for PDF path =====

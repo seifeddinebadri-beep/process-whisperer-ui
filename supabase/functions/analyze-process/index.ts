@@ -584,6 +584,13 @@ serve(async (req) => {
           uc.description,
         );
 
+        // Verify use case still exists before inserting detail (guards against concurrent deletes)
+        const { data: ucCheck } = await supabase.from("automation_use_cases").select("id").eq("id", uc.id).maybeSingle();
+        if (!ucCheck) {
+          console.warn(`Skipping detail insert for "${uc.title}" — use case was deleted by concurrent run.`);
+          continue;
+        }
+
         const { error: detailError } = await supabase.from("use_case_details").insert({
           use_case_id: uc.id,
           detail_content: detailContent,
