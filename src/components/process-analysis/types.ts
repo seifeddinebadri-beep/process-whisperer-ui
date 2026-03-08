@@ -18,6 +18,7 @@ export interface ProcessStep {
   stepOrder?: number;
   source?: StepSource;
   screenshotUrl?: string;
+  actions?: StepAction[];
 }
 
 export interface StepAction {
