@@ -56,6 +56,30 @@ serve(async (req) => {
     }
 
     // ===== Concurrency guard =====
+    // First, mark stale "started" entries older than 10 min as timed out
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: staleRuns } = await supabase
+      .from("agent_logs")
+      .select("id, created_at")
+      .eq("process_id", process_id)
+      .eq("agent_name", "orchestrator")
+      .eq("action", "orchestrate")
+      .eq("status", "started")
+      .lt("created_at", tenMinAgo);
+
+    if (staleRuns && staleRuns.length > 0) {
+      for (const stale of staleRuns) {
+        await supabase.from("agent_logs").insert({
+          process_id,
+          agent_name: "orchestrator",
+          action: "orchestrate",
+          status: "error",
+          message: "Marked as timed out (stale started entry older than 10 min).",
+        });
+      }
+    }
+
+    // Now check for genuinely active runs (started in last 10 min with no end)
     const { data: activeRuns } = await supabase
       .from("agent_logs")
       .select("id, created_at")
@@ -63,11 +87,11 @@ serve(async (req) => {
       .eq("agent_name", "orchestrator")
       .eq("action", "orchestrate")
       .eq("status", "started")
+      .gte("created_at", tenMinAgo)
       .order("created_at", { ascending: false })
       .limit(1);
 
     if (activeRuns && activeRuns.length > 0) {
-      // Check if there's a matching completed/error entry after the started one
       const { data: endEntries } = await supabase
         .from("agent_logs")
         .select("id")
