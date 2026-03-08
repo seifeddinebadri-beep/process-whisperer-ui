@@ -141,6 +141,7 @@ export const translations = {
       noScreenshots: "Aucune capture d'écran disponible pour ce processus.",
       viewScreenshot: "Voir la capture",
       page: "Page",
+      detailedActions: "actions détaillées",
     },
 
     // Step Edit Modal
