@@ -223,7 +223,7 @@ const ProcessUpload = () => {
       queryClient.invalidateQueries({ queryKey: ["uploaded_processes"] });
       queryClient.invalidateQueries({ queryKey: ["overview-processes"] });
       setSelectedFile(null); setSelectedCompany(""); setSelectedDept(""); setSelectedEntity(""); setSelectedActivity("");
-      setNotes(""); setUploading(false);
+      setNotes(""); setSelectedPdf(null); setUploading(false);
     },
     onError: (error) => {
       console.error("Upload error:", error);
