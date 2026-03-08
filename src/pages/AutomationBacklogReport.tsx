@@ -1,16 +1,18 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, Download, FileText, Loader2, Sparkles, Star,
   TrendingUp, Layers, Wrench, Target, Zap, Clock, CheckCircle2,
-  BarChart3, PieChart, ArrowRight, Shield, DollarSign
+  BarChart3, PieChart, ArrowRight, Shield, DollarSign, Search, X, Filter
 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -36,6 +38,13 @@ const impactOrder: Record<string, number> = { high: 3, medium: 2, low: 1 };
 const AutomationBacklogReport = () => {
   const navigate = useNavigate();
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Filters
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterImpact, setFilterImpact] = useState("all");
+  const [filterComplexity, setFilterComplexity] = useState("all");
+  const [filterProcess, setFilterProcess] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
 
   const { data: useCases = [], isLoading: loadingUC } = useQuery({
     queryKey: ["report-use-cases"],
@@ -77,10 +86,36 @@ const AutomationBacklogReport = () => {
 
   const pddSet = useMemo(() => new Set(pdds.map((p: any) => p.use_case_id)), [pdds]);
 
+  // Unique processes for filter dropdown
+  const uniqueProcesses = useMemo(() => {
+    const map = new Map<string, string>();
+    useCases.forEach((uc: any) => {
+      if (uc.uploaded_processes?.file_name) map.set(uc.process_id, uc.uploaded_processes.file_name);
+    });
+    return [...map.entries()];
+  }, [useCases]);
+
+  // Filter logic
+  const filtered = useMemo(() => {
+    return useCases.filter((uc: any) => {
+      if (filterSearch && !uc.title.toLowerCase().includes(filterSearch.toLowerCase()) && !(uc.description || "").toLowerCase().includes(filterSearch.toLowerCase())) return false;
+      if (filterImpact !== "all" && uc.impact !== filterImpact) return false;
+      if (filterComplexity !== "all" && uc.complexity !== filterComplexity) return false;
+      if (filterProcess !== "all" && uc.process_id !== filterProcess) return false;
+      if (filterStatus === "detailed" && !detailMap.has(uc.id)) return false;
+      if (filterStatus === "pdd" && !pddSet.has(uc.id)) return false;
+      if (filterStatus === "basic" && (detailMap.has(uc.id) || pddSet.has(uc.id))) return false;
+      return true;
+    });
+  }, [useCases, filterSearch, filterImpact, filterComplexity, filterProcess, filterStatus, detailMap, pddSet]);
+
   const sorted = useMemo(
-    () => [...useCases].sort((a: any, b: any) => (impactOrder[b.impact] || 0) - (impactOrder[a.impact] || 0)),
-    [useCases]
+    () => [...filtered].sort((a: any, b: any) => (impactOrder[b.impact] || 0) - (impactOrder[a.impact] || 0)),
+    [filtered]
   );
+
+  const activeFilterCount = [filterSearch, filterImpact !== "all", filterComplexity !== "all", filterProcess !== "all", filterStatus !== "all"].filter(Boolean).length;
+  const clearFilters = () => { setFilterSearch(""); setFilterImpact("all"); setFilterComplexity("all"); setFilterProcess("all"); setFilterStatus("all"); };
 
   const stats = useMemo(() => {
     const byImpact: Record<string, number> = { high: 0, medium: 0, low: 0 };
@@ -89,7 +124,7 @@ const AutomationBacklogReport = () => {
     const processSet = new Set<string>();
     const toolFreq: Record<string, number> = {};
 
-    useCases.forEach((uc: any) => {
+    filtered.forEach((uc: any) => {
       byImpact[uc.impact || "medium"] = (byImpact[uc.impact || "medium"] || 0) + 1;
       byComplexity[uc.complexity || "unknown"] = (byComplexity[uc.complexity || "unknown"] || 0) + 1;
       totalVariants += uc.automation_variants?.length || 0;
@@ -104,19 +139,22 @@ const AutomationBacklogReport = () => {
       });
     });
 
+    const filteredDetailCount = filtered.filter((uc: any) => detailMap.has(uc.id)).length;
+    const filteredPddCount = filtered.filter((uc: any) => pddSet.has(uc.id)).length;
+
     return {
-      total: useCases.length,
+      total: filtered.length,
       byImpact,
       byComplexity,
       totalVariants,
       processCount: processSet.size,
-      detailedCount: details.length,
-      pddCount: pdds.length,
+      detailedCount: filteredDetailCount,
+      pddCount: filteredPddCount,
       toolFreq: Object.entries(toolFreq).sort(([, a], [, b]) => b - a),
-      readinessPercent: useCases.length > 0 ? Math.round((details.length / useCases.length) * 100) : 0,
-      pddPercent: useCases.length > 0 ? Math.round((pdds.length / useCases.length) * 100) : 0,
+      readinessPercent: filtered.length > 0 ? Math.round((filteredDetailCount / filtered.length) * 100) : 0,
+      pddPercent: filtered.length > 0 ? Math.round((filteredPddCount / filtered.length) * 100) : 0,
     };
-  }, [useCases, details, pdds]);
+  }, [filtered, detailMap, pddSet]);
 
   const impactChartData = useMemo(() =>
     Object.entries(stats.byImpact)
@@ -362,6 +400,62 @@ const AutomationBacklogReport = () => {
           </Button>
         </div>
       </div>
+
+      {/* Filter Bar */}
+      <Card>
+        <CardContent className="pt-4 pb-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input placeholder="Rechercher…" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} className="pl-8 h-9 text-sm" />
+            </div>
+            <Select value={filterImpact} onValueChange={setFilterImpact}>
+              <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue placeholder="Impact" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tout impact</SelectItem>
+                <SelectItem value="high">Élevé</SelectItem>
+                <SelectItem value="medium">Moyen</SelectItem>
+                <SelectItem value="low">Faible</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterComplexity} onValueChange={setFilterComplexity}>
+              <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Complexité" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toute complexité</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterProcess} onValueChange={setFilterProcess}>
+              <SelectTrigger className="w-[180px] h-9 text-sm"><SelectValue placeholder="Processus" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les processus</SelectItem>
+                {uniqueProcesses.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue placeholder="Statut" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous</SelectItem>
+                <SelectItem value="detailed">✨ Détaillé</SelectItem>
+                <SelectItem value="pdd">📄 Avec PDD</SelectItem>
+                <SelectItem value="basic">Non détaillé</SelectItem>
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-9" onClick={clearFilters}>
+                <X className="h-3 w-3 mr-1" /> Réinitialiser ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+          {activeFilterCount > 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              <Filter className="h-3 w-3 inline mr-1" />{sorted.length} / {useCases.length} opportunités affichées
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
