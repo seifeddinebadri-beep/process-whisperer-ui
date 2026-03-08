@@ -536,6 +536,41 @@ export type Database = {
           },
         ]
       }
+      process_screenshots: {
+        Row: {
+          caption: string | null
+          created_at: string
+          file_path: string
+          id: string
+          page_number: number | null
+          process_id: string
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          file_path: string
+          id?: string
+          page_number?: number | null
+          process_id: string
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          file_path?: string
+          id?: string
+          page_number?: number | null
+          process_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_screenshots_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       process_steps: {
         Row: {
           business_rules: string | null
@@ -549,6 +584,7 @@ export type Database = {
           pain_points: string | null
           process_id: string
           role: string | null
+          screenshot_url: string | null
           source: string
           step_order: number
           tool_used: string | null
@@ -566,6 +602,7 @@ export type Database = {
           pain_points?: string | null
           process_id: string
           role?: string | null
+          screenshot_url?: string | null
           source?: string
           step_order?: number
           tool_used?: string | null
@@ -583,6 +620,7 @@ export type Database = {
           pain_points?: string | null
           process_id?: string
           role?: string | null
+          screenshot_url?: string | null
           source?: string
           step_order?: number
           tool_used?: string | null
