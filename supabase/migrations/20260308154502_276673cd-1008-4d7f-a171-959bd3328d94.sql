@@ -1,0 +1,1 @@
+CREATE POLICY "Allow public delete ba_conversations" ON public.ba_conversations FOR DELETE USING (true);
