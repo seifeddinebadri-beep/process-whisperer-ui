@@ -75,6 +75,27 @@ serve(async (req) => {
       pdfPath = existingScreenshots[0].file_path;
     }
 
+    // ===== PHASE 0a: Parse document into chunks =====
+    await log(supabase, process_id, "phase_parse", "started", "Phase 0a/5 — Parsing document into chunks...");
+    try {
+      const parseResult = await callFunction("parse-document", { process_id });
+      await log(supabase, process_id, "phase_parse", "completed",
+        `Parsing done: ${parseResult.chunks_created || 0} chunks created.`,
+        { chunks_created: parseResult.chunks_created }
+      );
+    } catch (e) {
+      await log(supabase, process_id, "phase_parse", "warning", `Parsing failed: ${(e as Error).message}. Continuing...`);
+    }
+
+    // ===== PHASE 0b: Generate embeddings =====
+    await log(supabase, process_id, "phase_embeddings", "started", "Phase 0b/5 — Generating vector embeddings...");
+    try {
+      await callFunction("generate-embeddings", { process_id });
+      await log(supabase, process_id, "phase_embeddings", "completed", "Embeddings generated.");
+    } catch (e) {
+      await log(supabase, process_id, "phase_embeddings", "warning", `Embeddings failed: ${(e as Error).message}. Continuing...`);
+    }
+
     // ===== PHASE 1: Analyst =====
     await log(supabase, process_id, "phase_analyst", "started", "Phase 1/5 — Analyst: extracting process steps and context...");
     
