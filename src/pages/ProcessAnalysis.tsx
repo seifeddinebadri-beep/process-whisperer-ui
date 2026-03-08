@@ -554,8 +554,18 @@ const ProcessAnalysis = () => {
     deleteStepMutation.mutate(stepId);
   };
 
-  const handleMoveStep = (index: number, direction: -1 | 1) => {
-    reorderMutation.mutate({ index, direction });
+  const handleStepDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = filteredSteps.findIndex(s => s.id === active.id);
+    const newIdx = filteredSteps.findIndex(s => s.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(filteredSteps, oldIdx, newIdx);
+    reorderStepsMutation.mutate(reordered.map(s => s.id));
+  };
+
+  const handleReorderActions = (stepId: string, actionIds: string[]) => {
+    reorderActionsMutation.mutate({ stepId, actionIds });
   };
 
   const handleContextChange = useCallback(
