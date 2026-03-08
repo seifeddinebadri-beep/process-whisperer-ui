@@ -253,6 +253,98 @@ const ProcessAnalysis = () => {
     },
   });
 
+  // === Action CRUD Mutations ===
+
+  const updateActionMutation = useMutation({
+    mutationFn: async (action: StepAction) => {
+      const { error } = await supabase
+        .from("step_actions")
+        .update({ description: action.description, system_used: action.systemUsed || null, screenshot_url: action.screenshotUrl || null } as any)
+        .eq("id", action.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] }),
+  });
+
+  const deleteActionMutation = useMutation({
+    mutationFn: async (actionId: string) => {
+      const { error } = await supabase.from("step_actions").delete().eq("id", actionId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] }),
+  });
+
+  const addActionMutation = useMutation({
+    mutationFn: async (stepId: string) => {
+      // Get current max action_order for this step
+      const { data: existing } = await supabase
+        .from("step_actions")
+        .select("action_order")
+        .eq("step_id", stepId)
+        .order("action_order", { ascending: false })
+        .limit(1);
+      const nextOrder = (existing?.[0]?.action_order ?? -1) + 1;
+      const { error } = await supabase.from("step_actions").insert({
+        step_id: stepId,
+        description: "Nouvelle action",
+        action_order: nextOrder,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] }),
+  });
+
+  const uploadScreenshot = async (bucket: string, path: string, file: File): Promise<string> => {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const handleUploadStepScreenshot = async (stepId: string, file: File) => {
+    try {
+      const path = `screenshots/steps/${stepId}/${file.name}`;
+      const url = await uploadScreenshot("process-files", path, file);
+      await supabase.from("process_steps").update({ screenshot_url: url }).eq("id", stepId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot ajouté" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteStepScreenshot = async (stepId: string) => {
+    try {
+      await supabase.from("process_steps").update({ screenshot_url: null }).eq("id", stepId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot supprimé" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleUploadActionScreenshot = async (actionId: string, file: File) => {
+    try {
+      const path = `screenshots/actions/${actionId}/${file.name}`;
+      const url = await uploadScreenshot("process-files", path, file);
+      await supabase.from("step_actions").update({ screenshot_url: url } as any).eq("id", actionId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot ajouté" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteActionScreenshot = async (actionId: string) => {
+    try {
+      await supabase.from("step_actions").update({ screenshot_url: null } as any).eq("id", actionId);
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+      toast({ title: "Screenshot supprimé" });
+    } catch (e: any) {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    }
+  };
+
   const updateContextMutation = useMutation({
     mutationFn: async (ctx: ProcessContext) => {
       const payload = {
