@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, Download, FileText, Loader2, Sparkles, Star,
   TrendingUp, Layers, Wrench, Target, Zap, Clock, CheckCircle2,
-  BarChart3, PieChart, ArrowRight, Shield, DollarSign
+  BarChart3, PieChart, ArrowRight, Shield, DollarSign, Search, X, Filter
 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
