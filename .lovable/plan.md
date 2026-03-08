@@ -1,97 +1,58 @@
 
 
-## Plan: Rename KB hierarchy, add delete, add document upload
+## Plan: Integrate Knowledge Base Context into As-Is Process Analysis
 
-### 1. Rename hierarchy labels (i18n only, no DB changes)
-
-Update `src/lib/i18n.tsx` — the KB section labels:
-- "Companies" stays as top level (unchanged)
-- Current "Departments" → **"Départements"** (stays same in FR, already correct)
-- Current "Entities" → **"Entités"** (stays same)  
-- Current "Activities" → **"Activités"** (stays same)
-
-Wait — re-reading the user request: "Department -> Entity -> Activity -> Service". This means the hierarchy levels should be renamed:
-- Level 1 (was "Department") → **"Département"** (no change)
-- Level 2 (was "Entity") → **"Entité"** (no change)  
-- Level 3 (was "Activity") → **"Activité"** (no change)
-- Level 4 → **"Service"** (NEW level, or rename Activity to Service?)
-
-Actually, the user says "rename it": the current hierarchy under a company is Department > Entity > Activity. The user wants it labeled as **Department > Entity > Activity > Service**. This adds a new level "Service" under Activity, OR renames the existing levels.
-
-Given the DB structure (departments → entities → activities), the simplest interpretation is renaming the labels:
-- What was "Department" → **"Département"** (same)
-- What was "Entity" → **"Entité"** (same)  
-- What was "Activity" → **"Activité"** (same)
-
-But that's 3 levels, and the user listed 4. I think the user wants to rename the 3 existing sub-levels under Company:
-- "Departments" → **"Department"** 
-- "Entities" → **"Entity"**
-- "Activities" → **"Activity"**
-
-And add a 4th level: **"Service"** under Activity.
-
-OR the user wants to rename the 3 levels as: Department, Entity, Activity, Service — meaning rename what was "Activity" to "Service" and add "Activity" as a middle level. That would require a new DB table.
-
-**Simplest interpretation**: Rename the 3 existing levels to match the user's naming, and the last one "Service" replaces "Activity" label. So:
-- Level 1: Department (same)
-- Level 2: Entity (same)  
-- Level 3: Activity (same — currently "Entity" in DB)
-- Level 4: Service (currently "Activity" in DB, renamed to "Service")
-
-Actually, I think the user just wants the labels to be exactly: **Department → Entity → Activity → Service**. Since there are currently only 3 levels under Company (Department, Entity, Activity), this means adding a **4th level: Service** under Activity. This requires a new DB table `services`.
-
-Let me go with the most practical interpretation: **add a new "Service" level under Activity**, requiring a new `services` table.
+### Problem
+When an event log is uploaded with a KB context (company/department/entity/activity), the as-is analysis agent ignores all KB data — company strategy, department descriptions, activity business objectives, tools, and uploaded KB documents. The analysis is based solely on the event log content.
 
 ### Changes
 
-**A. Database migration — create `services` table**
+**1. Database Migration — add `service_id` to `uploaded_processes`**
+The `uploaded_processes` table has `company_id`, `department_id`, `entity_id`, `activity_id` but no `service_id`. Add it to complete the hierarchy.
+
 ```sql
-CREATE TABLE public.services (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  activity_id uuid NOT NULL REFERENCES public.activities(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  description text,
-  business_objective text,
-  documentation text[]
-);
-ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
--- RLS policies (public access like other KB tables)
-CREATE POLICY "Allow public read services" ON public.services FOR SELECT USING (true);
-CREATE POLICY "Allow public insert services" ON public.services FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public delete services" ON public.services FOR DELETE USING (true);
-CREATE POLICY "Allow public update services" ON public.services FOR UPDATE USING (true);
+ALTER TABLE public.uploaded_processes ADD COLUMN service_id uuid REFERENCES public.services(id);
 ```
 
-Also create a `kb_documents` table for uploaded documents at any level:
-```sql
-CREATE TABLE public.kb_documents (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  file_name text NOT NULL,
-  file_path text NOT NULL,
-  entity_type text NOT NULL, -- 'company','department','entity','activity','service'
-  entity_id uuid NOT NULL,
-  uploaded_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.kb_documents ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read kb_documents" ON public.kb_documents FOR SELECT USING (true);
-CREATE POLICY "Allow public insert kb_documents" ON public.kb_documents FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public delete kb_documents" ON public.kb_documents FOR DELETE USING (true);
+**2. Update `src/pages/ProcessUpload.tsx`**
+- Add a 5th dropdown for "Service" (fetched from `services` where `activity_id` matches)
+- Save `service_id` in the insert to `uploaded_processes`
+
+**3. Update `supabase/functions/agent-analyze-as-is/index.ts` — fetch and inject KB context**
+
+Before calling the AI, fetch the full KB hierarchy for the process:
+- From `uploaded_processes`, get `company_id`, `department_id`, `entity_id`, `activity_id`, `service_id`
+- Fetch company (name, industry, size, strategy_notes), department (name), entity (name), activity (name, description, business_objective), service (name, description, business_objective)
+- Fetch `tools` linked via `activity_tools` for the relevant activity
+- Fetch `kb_documents` at all levels (company, department, entity, activity, service)
+- For each KB document, download from storage and extract text content (for .txt/.csv/.json files)
+- Build a "Knowledge Base Context" section prepended to the AI prompt
+
+The system prompt will be enriched with:
+```
+--- CONTEXTE BASE DE CONNAISSANCES ---
+Entreprise: {name} | Secteur: {industry} | Taille: {size}
+Stratégie: {strategy_notes}
+Département: {dept_name}
+Entité: {entity_name}
+Activité: {activity_name} — {activity_description}
+Objectif métier: {business_objective}
+Service: {service_name} — {service_description}
+Outils référencés: {tool1, tool2, ...}
+
+Documents KB associés:
+[Content of each KB document]
+---
 ```
 
-**B. Update `src/lib/i18n.tsx`**
-- Add new KB translations for Service level: `services`, `addService`, `serviceName`, `serviceAdded`, `addNewService`, `serviceDetails`
-- Add delete-related translations: `confirmDelete`, `deleted`
-- Add document upload translations: `uploadDocument`, `documentUploaded`
+This gives the analyst agent full organizational context to produce a more accurate as-is analysis grounded in real business knowledge.
 
-**C. Update `src/pages/KnowledgeBase.tsx`**
-1. **Add Service level**: New view "services", queries, mutations, navigation, cards — following the same pattern as activities
-2. **Add delete buttons** on each card (company, department, entity, activity, service) with confirmation dialog. Each delete calls `supabase.from("tableName").delete().eq("id", id)` and invalidates queries.
-3. **Add document upload**: A file input + upload button on each level's view. Files uploaded to the `process-files` bucket under a path like `kb/{entity_type}/{entity_id}/{filename}`. Record saved in `kb_documents` table. Display uploaded documents as badges with delete option.
-
-**D. Update Activity view**: Currently clicking an Activity opens a detail Sheet. Now clicking an Activity navigates to the Services list (new level). The detail sheet moves to Service level.
+**4. Update `supabase/functions/agent-orchestrator/index.ts`**
+- Log a new phase "phase_kb_context" to show KB retrieval in the pipeline activity log
 
 ### File changes summary
-- **Migration**: 1 new migration (services table + kb_documents table)
-- `src/lib/i18n.tsx`: Add service + delete + upload translations
-- `src/pages/KnowledgeBase.tsx`: Add services level, delete buttons on all levels, document upload UI
+- **Migration**: Add `service_id` column to `uploaded_processes`
+- `src/pages/ProcessUpload.tsx`: Add Service dropdown + save service_id
+- `supabase/functions/agent-analyze-as-is/index.ts`: Fetch KB hierarchy + documents, inject into AI prompt
+- `supabase/functions/agent-orchestrator/index.ts`: Add KB context retrieval logging phase
 
