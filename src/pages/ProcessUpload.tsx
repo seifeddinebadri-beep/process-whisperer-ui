@@ -153,6 +153,14 @@ const ProcessUpload = () => {
       const { error: storageError } = await supabase.storage.from("process-files").upload(filePath, selectedFile);
       if (storageError) throw storageError;
 
+      // Upload PDF if attached
+      let pdfPath: string | null = null;
+      if (selectedPdf) {
+        pdfPath = `${crypto.randomUUID()}/screenshots/${selectedPdf.name}`;
+        const { error: pdfError } = await supabase.storage.from("process-files").upload(pdfPath, selectedPdf);
+        if (pdfError) throw pdfError;
+      }
+
       updateLastEntry({ status: "done", message: "File uploaded successfully." });
       addAgentEntry({ agent: "analyst", status: "working", message: "Creating process record..." });
 
