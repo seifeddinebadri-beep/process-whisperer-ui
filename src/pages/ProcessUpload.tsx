@@ -26,6 +26,7 @@ const ProcessUpload = () => {
   const [selectedDept, setSelectedDept] = useState("");
   const [selectedEntity, setSelectedEntity] = useState("");
   const [selectedActivity, setSelectedActivity] = useState("");
+  const [selectedService, setSelectedService] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
