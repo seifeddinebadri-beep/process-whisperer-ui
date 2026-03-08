@@ -44,6 +44,7 @@ export function AppSidebar() {
     { title: t.nav.processUpload, url: "/process-upload", icon: Upload },
     { title: t.nav.processAnalysis, url: "/process-analysis", icon: GitBranch },
     { title: t.nav.automationDiscovery, url: "/automation-discovery", icon: Lightbulb },
+    { title: "Rapport Backlog", url: "/automation-discovery/report", icon: BarChart3 },
   ];
 
   const activeIndex = (() => {
