@@ -671,6 +671,44 @@ export type Database = {
           },
         ]
       }
+      step_actions: {
+        Row: {
+          action_order: number
+          created_at: string
+          description: string
+          id: string
+          screenshot_page: number | null
+          step_id: string
+          system_used: string | null
+        }
+        Insert: {
+          action_order?: number
+          created_at?: string
+          description: string
+          id?: string
+          screenshot_page?: number | null
+          step_id: string
+          system_used?: string | null
+        }
+        Update: {
+          action_order?: number
+          created_at?: string
+          description?: string
+          id?: string
+          screenshot_page?: number | null
+          step_id?: string
+          system_used?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "step_actions_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "process_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tools: {
         Row: {
           company_id: string
