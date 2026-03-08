@@ -114,6 +114,9 @@ export const translations = {
       fileUploaded: "Fichier téléversé",
       contextAssigned: "Contexte assigné",
       readyForAnalysis: "Le processus est prêt pour l'analyse.",
+      pdfAttachment: "Documentation visuelle (PDF)",
+      pdfDropHere: "Joindre un PDF avec captures d'écran du processus",
+      pdfAttached: "PDF joint",
     },
 
     // Process Analysis
