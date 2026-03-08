@@ -20,18 +20,24 @@ import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from 
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
-// Mock data removed — only real DB data is used
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
 import { AgentMessage } from "@/components/agents/AgentMessage";
 import type { AgentLogEntry } from "@/components/agents/AgentActivityLog";
 import { Zap } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import type { DragEndEvent } from "@dnd-kit/core";
 
 const ProcessAnalysis = () => {
   const { t, lang } = useLang();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [selectedProcessId, setSelectedProcessId] = useState("");
+
+  const stepDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
 
   // Fetch processes with status analyzed or approved
   const { data: processes = [], isLoading: loadingProcesses } = useQuery({
@@ -238,15 +244,28 @@ const ProcessAnalysis = () => {
     },
   });
 
-  const reorderMutation = useMutation({
-    mutationFn: async ({ index, direction }: { index: number; direction: -1 | 1 }) => {
-      const target = index + direction;
-      const stepA = steps[index];
-      const stepB = steps[target];
-      const { error: e1 } = await supabase.from("process_steps").update({ step_order: stepB.stepOrder }).eq("id", stepA.id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase.from("process_steps").update({ step_order: stepA.stepOrder }).eq("id", stepB.id);
-      if (e2) throw e2;
+  const reorderStepsMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const updates = orderedIds.map((id, idx) =>
+        supabase.from("process_steps").update({ step_order: idx }).eq("id", id)
+      );
+      const results = await Promise.all(updates);
+      const err = results.find(r => r.error);
+      if (err?.error) throw err.error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
+    },
+  });
+
+  const reorderActionsMutation = useMutation({
+    mutationFn: async ({ actionIds }: { stepId: string; actionIds: string[] }) => {
+      const updates = actionIds.map((id, idx) =>
+        supabase.from("step_actions").update({ action_order: idx }).eq("id", id)
+      );
+      const results = await Promise.all(updates);
+      const err = results.find(r => r.error);
+      if (err?.error) throw err.error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["process-steps", selectedProcessId] });
@@ -535,8 +554,18 @@ const ProcessAnalysis = () => {
     deleteStepMutation.mutate(stepId);
   };
 
-  const handleMoveStep = (index: number, direction: -1 | 1) => {
-    reorderMutation.mutate({ index, direction });
+  const handleStepDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = filteredSteps.findIndex(s => s.id === active.id);
+    const newIdx = filteredSteps.findIndex(s => s.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(filteredSteps, oldIdx, newIdx);
+    reorderStepsMutation.mutate(reordered.map(s => s.id));
+  };
+
+  const handleReorderActions = (stepId: string, actionIds: string[]) => {
+    reorderActionsMutation.mutate({ stepId, actionIds });
   };
 
   const handleContextChange = useCallback(
@@ -737,30 +766,35 @@ const ProcessAnalysis = () => {
                 {filteredSteps.length === 0 && displaySteps.length > 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-6">Aucune étape ne correspond aux filtres</p>
                 ) : (
-                  filteredSteps.map((step, i) => (
-                    <StepCard
-                      key={step.id}
-                      step={step}
-                      index={i}
-                      total={filteredSteps.length}
-                      onEdit={setEditingStep}
-                      onDelete={handleDeleteStep}
-                      onMoveUp={(idx) => handleMoveStep(idx, -1)}
-                      onMoveDown={(idx) => handleMoveStep(idx, 1)}
-                      hideActions={stepFilterCount > 0}
-                      onScreenshotPageClick={(page) => {
-                        const el = document.getElementById("screenshot-gallery");
-                        if (el) el.scrollIntoView({ behavior: "smooth" });
-                      }}
-                      onUpdateAction={(action) => updateActionMutation.mutate(action)}
-                      onDeleteAction={(actionId) => deleteActionMutation.mutate(actionId)}
-                      onAddAction={(stepId) => addActionMutation.mutate(stepId)}
-                      onUploadStepScreenshot={handleUploadStepScreenshot}
-                      onDeleteStepScreenshot={handleDeleteStepScreenshot}
-                      onUploadActionScreenshot={handleUploadActionScreenshot}
-                      onDeleteActionScreenshot={handleDeleteActionScreenshot}
-                    />
-                  ))
+                  <DndContext sensors={stepDndSensors} collisionDetection={closestCenter} onDragEnd={handleStepDragEnd}>
+                    <SortableContext items={filteredSteps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                      {filteredSteps.map((step, i) => (
+                        <StepCard
+                          key={step.id}
+                          step={step}
+                          index={i}
+                          total={filteredSteps.length}
+                          onEdit={setEditingStep}
+                          onDelete={handleDeleteStep}
+                          onMoveUp={() => {}}
+                          onMoveDown={() => {}}
+                          hideActions={stepFilterCount > 0}
+                          onScreenshotPageClick={(page) => {
+                            const el = document.getElementById("screenshot-gallery");
+                            if (el) el.scrollIntoView({ behavior: "smooth" });
+                          }}
+                          onUpdateAction={(action) => updateActionMutation.mutate(action)}
+                          onDeleteAction={(actionId) => deleteActionMutation.mutate(actionId)}
+                          onAddAction={(stepId) => addActionMutation.mutate(stepId)}
+                          onUploadStepScreenshot={handleUploadStepScreenshot}
+                          onDeleteStepScreenshot={handleDeleteStepScreenshot}
+                          onUploadActionScreenshot={handleUploadActionScreenshot}
+                          onDeleteActionScreenshot={handleDeleteActionScreenshot}
+                          onReorderActions={handleReorderActions}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
                 {/* Extract actions banner */}
                 {hasStepsButNoActions && (
