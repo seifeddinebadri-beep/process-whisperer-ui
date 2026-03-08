@@ -19,6 +19,7 @@ import { ClarificationPanel } from "@/components/process-analysis/ClarificationP
 import type { ProcessStep, ProcessContext, ProcessScreenshot } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
+import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
 // Mock data removed — only real DB data is used
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
