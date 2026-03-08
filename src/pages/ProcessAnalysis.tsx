@@ -20,12 +20,14 @@ import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from 
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
-// Mock data removed — only real DB data is used
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
 import { AgentMessage } from "@/components/agents/AgentMessage";
 import type { AgentLogEntry } from "@/components/agents/AgentActivityLog";
 import { Zap } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import type { DragEndEvent } from "@dnd-kit/core";
 
 const ProcessAnalysis = () => {
   const { t, lang } = useLang();
