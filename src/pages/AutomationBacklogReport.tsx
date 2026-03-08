@@ -86,10 +86,36 @@ const AutomationBacklogReport = () => {
 
   const pddSet = useMemo(() => new Set(pdds.map((p: any) => p.use_case_id)), [pdds]);
 
+  // Unique processes for filter dropdown
+  const uniqueProcesses = useMemo(() => {
+    const map = new Map<string, string>();
+    useCases.forEach((uc: any) => {
+      if (uc.uploaded_processes?.file_name) map.set(uc.process_id, uc.uploaded_processes.file_name);
+    });
+    return [...map.entries()];
+  }, [useCases]);
+
+  // Filter logic
+  const filtered = useMemo(() => {
+    return useCases.filter((uc: any) => {
+      if (filterSearch && !uc.title.toLowerCase().includes(filterSearch.toLowerCase()) && !(uc.description || "").toLowerCase().includes(filterSearch.toLowerCase())) return false;
+      if (filterImpact !== "all" && uc.impact !== filterImpact) return false;
+      if (filterComplexity !== "all" && uc.complexity !== filterComplexity) return false;
+      if (filterProcess !== "all" && uc.process_id !== filterProcess) return false;
+      if (filterStatus === "detailed" && !detailMap.has(uc.id)) return false;
+      if (filterStatus === "pdd" && !pddSet.has(uc.id)) return false;
+      if (filterStatus === "basic" && (detailMap.has(uc.id) || pddSet.has(uc.id))) return false;
+      return true;
+    });
+  }, [useCases, filterSearch, filterImpact, filterComplexity, filterProcess, filterStatus, detailMap, pddSet]);
+
   const sorted = useMemo(
-    () => [...useCases].sort((a: any, b: any) => (impactOrder[b.impact] || 0) - (impactOrder[a.impact] || 0)),
-    [useCases]
+    () => [...filtered].sort((a: any, b: any) => (impactOrder[b.impact] || 0) - (impactOrder[a.impact] || 0)),
+    [filtered]
   );
+
+  const activeFilterCount = [filterSearch, filterImpact !== "all", filterComplexity !== "all", filterProcess !== "all", filterStatus !== "all"].filter(Boolean).length;
+  const clearFilters = () => { setFilterSearch(""); setFilterImpact("all"); setFilterComplexity("all"); setFilterProcess("all"); setFilterStatus("all"); };
 
   const stats = useMemo(() => {
     const byImpact: Record<string, number> = { high: 0, medium: 0, low: 0 };
