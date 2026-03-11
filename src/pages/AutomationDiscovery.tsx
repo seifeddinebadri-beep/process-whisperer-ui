@@ -345,6 +345,7 @@ const AutomationDiscovery = () => {
                       <TableCell className="font-medium text-sm">
                         <span className="flex items-center gap-1.5">
                           {uc.title}
+                          {isValidated(uc.id) && <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />}
                           {hasPdd(uc.id) && <FileText className="h-3.5 w-3.5 text-green-600 shrink-0" />}
                           {hasDetail(uc.id) && <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />}
                         </span>
