@@ -92,9 +92,23 @@ const AutomationDiscovery = () => {
     },
   });
 
+  // Check which use cases are validated for development
+  const { data: validatedUcIds } = useQuery({
+    queryKey: ["validated-uc-ids"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("validated_selections")
+        .select("use_case_id");
+      if (error) throw error;
+      return new Set((data || []).map((d: any) => d.use_case_id));
+    },
+  });
+
   const hasPdd = (ucId: string) => pddIds?.has(ucId) ?? false;
 
   const hasDetail = (ucId: string) => detailIds?.has(ucId) ?? false;
+
+  const isValidated = (ucId: string) => validatedUcIds?.has(ucId) ?? false;
 
   // Derive unique values for filters
   const uniqueProcesses = useMemo(() => {

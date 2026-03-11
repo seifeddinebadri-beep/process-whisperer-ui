@@ -157,7 +157,19 @@ const AutomationBacklogReport = () => {
     }
   }, [selectedUseCases, selectedVariants, useCases, queryClient]);
 
-  const detailMap = useMemo(() => {
+  const removeFromValidation = useCallback((ucId: string, variants: any[]) => {
+    setSelectedUseCases(prev => {
+      const next = new Set(prev);
+      next.delete(ucId);
+      return next;
+    });
+    setSelectedVariants(prev => {
+      const next = new Set(prev);
+      variants.forEach((v: any) => next.delete(v.id));
+      return next;
+    });
+  }, []);
+
     const m = new Map<string, any>();
     details.forEach((d: any) => m.set(d.use_case_id, d));
     return m;
