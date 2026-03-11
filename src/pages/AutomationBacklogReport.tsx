@@ -170,6 +170,7 @@ const AutomationBacklogReport = () => {
     });
   }, []);
 
+  const detailMap = useMemo(() => {
     const m = new Map<string, any>();
     details.forEach((d: any) => m.set(d.use_case_id, d));
     return m;
