@@ -262,6 +262,11 @@ const AutomationDiscovery = () => {
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
                       <div className="flex items-center gap-1.5">
+                        {isValidated(uc.id) && (
+                          <Badge variant="outline" className="text-xs gap-1 border-green-500/30 bg-green-500/10 text-green-700">
+                            <CheckCircle2 className="h-3 w-3" /> Validé
+                          </Badge>
+                        )}
                         {hasPdd(uc.id) && (
                           <Badge variant="outline" className="text-xs gap-1 border-green-500/30 text-green-700">
                             <FileText className="h-3 w-3" /> PDD
