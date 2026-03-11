@@ -808,83 +808,91 @@ const AutomationBacklogReport = () => {
             </Badge>
           </div>
 
-          {processGroups.filter(g => g.useCases.some((uc: any) => selectedUseCases.has(uc.id))).map((group) => (
-            <Card key={`validated-${group.processId}`} className="border-green-500/20 overflow-hidden">
-              {/* Process header */}
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-green-500/5 border-b border-green-500/10">
-                <FileText className="h-4 w-4 text-green-600 shrink-0" />
-                <span className="font-semibold text-sm">{group.processName}</span>
-                <Badge variant="secondary" className="text-[10px] ml-auto">
-                  {group.useCases.filter((uc: any) => selectedUseCases.has(uc.id)).length} cas
-                </Badge>
-              </div>
+          {processGroups.filter(g => g.useCases.some((uc: any) => selectedUseCases.has(uc.id))).map((group) => {
+            const isExpanded = expandedValidatedProcesses.has(group.processId);
+            const selectedUcs = group.useCases.filter((uc: any) => selectedUseCases.has(uc.id));
+            const selectedVarCount = selectedUcs.reduce((acc: number, uc: any) => acc + (uc.automation_variants || []).filter((v: any) => selectedVariants.has(v.id)).length, 0);
 
-              <div className="divide-y">
-                {group.useCases.filter((uc: any) => selectedUseCases.has(uc.id)).map((uc: any) => {
-                  const variants = (uc.automation_variants || []).filter((v: any) => selectedVariants.has(v.id)).sort((a: any, b: any) => a.variant_number - b.variant_number);
-                  const hasPdd = pddSet.has(uc.id);
-                  const pddId = pdds.find((p: any) => p.use_case_id === uc.id)?.id;
+            return (
+              <Card key={`validated-${group.processId}`} className="border-green-500/20 overflow-hidden">
+                {/* Collapsible Process header */}
+                <button
+                  className="w-full flex items-center gap-2 px-4 py-2.5 bg-green-500/5 border-b border-green-500/10 hover:bg-green-500/10 transition-colors cursor-pointer text-left"
+                  onClick={() => toggleExpandValidatedProcess(group.processId)}
+                >
+                  {isExpanded ? <ChevronDown className="h-4 w-4 text-green-600 shrink-0" /> : <ChevronRight className="h-4 w-4 text-green-600 shrink-0" />}
+                  <FileText className="h-4 w-4 text-green-600 shrink-0" />
+                  <span className="font-semibold text-sm flex-1">{group.processName}</span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {selectedUcs.length} cas · {selectedVarCount} variantes
+                  </Badge>
+                </button>
 
-                  return (
-                    <div key={uc.id} className="px-4 py-3 pl-8">
-                      {/* Use Case row */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">{uc.title}</div>
-                          <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{uc.description}</div>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <ImpactBadge impact={uc.impact} />
-                          <Badge variant="outline" className="text-[10px] capitalize">{uc.complexity || "—"}</Badge>
-                          <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
-                            <Sparkles className="h-3 w-3 mr-1" /> Discovery
-                          </Button>
-                          {hasPdd && pddId && (
-                            <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-green-700" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
-                              <FileText className="h-3 w-3 mr-1" /> PDD
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                {isExpanded && (
+                  <div className="divide-y">
+                    {selectedUcs.map((uc: any) => {
+                      const variants = (uc.automation_variants || []).filter((v: any) => selectedVariants.has(v.id)).sort((a: any, b: any) => a.variant_number - b.variant_number);
+                      const hasPdd = pddSet.has(uc.id);
+                      const pddId = pdds.find((p: any) => p.use_case_id === uc.id)?.id;
 
-                      {/* Selected variants */}
-                      {variants.length > 0 && (
-                        <div className="mt-2 space-y-1 ml-4">
-                          {variants.map((v: any) => (
-                            <div key={v.id} className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs bg-green-500/5 border border-green-500/10">
-                              {v.recommended && <Star className="h-3 w-3 text-amber-500 shrink-0" />}
-                              <span className="font-medium truncate flex-1">{v.variant_name}</span>
-                              <span className="text-muted-foreground capitalize">{v.complexity || "—"}</span>
-                              {v.estimated_cost && <span className="text-muted-foreground">· {v.estimated_cost}</span>}
-                              {v.estimated_timeline && (
-                                <span className="text-muted-foreground flex items-center gap-0.5">
-                                  <Clock className="h-3 w-3" /> {v.estimated_timeline}
-                                </span>
-                              )}
-                              {(v.tools_suggested || []).length > 0 && (
-                                <div className="flex gap-1 ml-1">
-                                  {v.tools_suggested.slice(0, 3).map((t: string) => (
-                                    <Badge key={t} variant="secondary" className="text-[9px] h-4 px-1.5">{t}</Badge>
-                                  ))}
-                                  {v.tools_suggested.length > 3 && (
-                                    <Badge variant="secondary" className="text-[9px] h-4 px-1.5">+{v.tools_suggested.length - 3}</Badge>
-                                  )}
-                                </div>
+                      return (
+                        <div key={uc.id} className="px-4 py-3 pl-8">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-medium text-sm">{uc.title}</div>
+                              <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{uc.description}</div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <ImpactBadge impact={uc.impact} />
+                              <Badge variant="outline" className="text-[10px] capitalize">{uc.complexity || "—"}</Badge>
+                              <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
+                                <Sparkles className="h-3 w-3 mr-1" /> Discovery
+                              </Button>
+                              {hasPdd && pddId && (
+                                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-green-700" onClick={() => navigate(`/automation-discovery/${uc.id}`)}>
+                                  <FileText className="h-3 w-3 mr-1" /> PDD
+                                </Button>
                               )}
                             </div>
-                          ))}
+                          </div>
+
+                          {variants.length > 0 && (
+                            <div className="mt-2 space-y-1 ml-4">
+                              {variants.map((v: any) => (
+                                <div key={v.id} className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs bg-green-500/5 border border-green-500/10">
+                                  {v.recommended && <Star className="h-3 w-3 text-amber-500 shrink-0" />}
+                                  <span className="font-medium truncate flex-1">{v.variant_name}</span>
+                                  <span className="text-muted-foreground capitalize">{v.complexity || "—"}</span>
+                                  {v.estimated_cost && <span className="text-muted-foreground">· {v.estimated_cost}</span>}
+                                  {v.estimated_timeline && (
+                                    <span className="text-muted-foreground flex items-center gap-0.5">
+                                      <Clock className="h-3 w-3" /> {v.estimated_timeline}
+                                    </span>
+                                  )}
+                                  {(v.tools_suggested || []).length > 0 && (
+                                    <div className="flex gap-1 ml-1">
+                                      {v.tools_suggested.slice(0, 3).map((t: string) => (
+                                        <Badge key={t} variant="secondary" className="text-[9px] h-4 px-1.5">{t}</Badge>
+                                      ))}
+                                      {v.tools_suggested.length > 3 && (
+                                        <Badge variant="secondary" className="text-[9px] h-4 px-1.5">+{v.tools_suggested.length - 3}</Badge>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          ))}
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
-
-      {/* Technology Landscape */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
