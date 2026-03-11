@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X, FileText, ArrowUpDown, Clock, BarChart3 } from "lucide-react";
+import { LayoutGrid, List, Loader2, Sparkles, Trash2, Search, X, FileText, ArrowUpDown, Clock, BarChart3, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useQueryClient } from "@tanstack/react-query";
@@ -92,9 +92,23 @@ const AutomationDiscovery = () => {
     },
   });
 
+  // Check which use cases are validated for development
+  const { data: validatedUcIds } = useQuery({
+    queryKey: ["validated-uc-ids"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("validated_selections")
+        .select("use_case_id");
+      if (error) throw error;
+      return new Set((data || []).map((d: any) => d.use_case_id));
+    },
+  });
+
   const hasPdd = (ucId: string) => pddIds?.has(ucId) ?? false;
 
   const hasDetail = (ucId: string) => detailIds?.has(ucId) ?? false;
+
+  const isValidated = (ucId: string) => validatedUcIds?.has(ucId) ?? false;
 
   // Derive unique values for filters
   const uniqueProcesses = useMemo(() => {
@@ -248,6 +262,11 @@ const AutomationDiscovery = () => {
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-sm font-medium">{uc.title}</CardTitle>
                       <div className="flex items-center gap-1.5">
+                        {isValidated(uc.id) && (
+                          <Badge variant="outline" className="text-xs gap-1 border-green-500/30 bg-green-500/10 text-green-700">
+                            <CheckCircle2 className="h-3 w-3" /> Validé
+                          </Badge>
+                        )}
                         {hasPdd(uc.id) && (
                           <Badge variant="outline" className="text-xs gap-1 border-green-500/30 text-green-700">
                             <FileText className="h-3 w-3" /> PDD
@@ -326,6 +345,7 @@ const AutomationDiscovery = () => {
                       <TableCell className="font-medium text-sm">
                         <span className="flex items-center gap-1.5">
                           {uc.title}
+                          {isValidated(uc.id) && <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />}
                           {hasPdd(uc.id) && <FileText className="h-3.5 w-3.5 text-green-600 shrink-0" />}
                           {hasDetail(uc.id) && <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />}
                         </span>
