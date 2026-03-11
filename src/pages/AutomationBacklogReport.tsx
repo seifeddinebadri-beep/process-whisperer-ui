@@ -853,6 +853,15 @@ const AutomationBacklogReport = () => {
                                   <FileText className="h-3 w-3 mr-1" /> PDD
                                 </Button>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeFromValidation(uc.id, uc.automation_variants || [])}
+                                title="Retirer de la validation"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
                           </div>
 
