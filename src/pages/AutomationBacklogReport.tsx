@@ -939,8 +939,9 @@ const AutomationBacklogReport = () => {
               <Button variant="outline" size="sm" onClick={exportPDF}>
                 <FileText className="h-3.5 w-3.5 mr-1.5" /> PDF
               </Button>
-              <Button size="sm" className="shadow-sm" onClick={exportPDF}>
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Valider pour développement
+              <Button size="sm" className="shadow-sm" onClick={saveValidation} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                Valider pour développement
               </Button>
             </div>
           </div>
