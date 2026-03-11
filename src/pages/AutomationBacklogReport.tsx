@@ -61,6 +61,9 @@ const AutomationBacklogReport = () => {
   const [selectedUseCases, setSelectedUseCases] = useState<Set<string>>(new Set());
   const [selectedVariants, setSelectedVariants] = useState<Set<string>>(new Set());
   const [expandedProcesses, setExpandedProcesses] = useState<Set<string>>(new Set());
+  const [expandedValidatedProcesses, setExpandedValidatedProcesses] = useState<Set<string>>(new Set());
+  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: useCases = [], isLoading: loadingUC } = useQuery({
     queryKey: ["report-use-cases"],
@@ -92,7 +95,67 @@ const AutomationBacklogReport = () => {
     },
   });
 
-  const isLoading = loadingUC || loadingDetails || loadingPdds;
+  const { data: validatedSelections = [], isLoading: loadingValidated } = useQuery({
+    queryKey: ["validated-selections"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("validated_selections").select("*");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Load saved validated selections into state on mount
+  useEffect(() => {
+    if (validatedSelections.length > 0 && useCases.length > 0) {
+      const savedUcIds = new Set(validatedSelections.map((v: any) => v.use_case_id));
+      const savedVarIds = new Set(validatedSelections.filter((v: any) => v.variant_id).map((v: any) => v.variant_id));
+      setSelectedUseCases(prev => prev.size === 0 ? savedUcIds : prev);
+      setSelectedVariants(prev => prev.size === 0 ? savedVarIds : prev);
+    }
+  }, [validatedSelections, useCases]);
+
+  const isLoading = loadingUC || loadingDetails || loadingPdds || loadingValidated;
+
+  const toggleExpandValidatedProcess = useCallback((pid: string) => {
+    setExpandedValidatedProcesses(prev => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid); else next.add(pid);
+      return next;
+    });
+  }, []);
+
+  const saveValidation = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      // Delete existing
+      await supabase.from("validated_selections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      
+      // Build rows
+      const rows: { use_case_id: string; variant_id: string | null }[] = [];
+      selectedUseCases.forEach(ucId => {
+        const uc = useCases.find((u: any) => u.id === ucId);
+        const ucVariants = (uc?.automation_variants || []).filter((v: any) => selectedVariants.has(v.id));
+        if (ucVariants.length > 0) {
+          ucVariants.forEach((v: any) => rows.push({ use_case_id: ucId, variant_id: v.id }));
+        } else {
+          rows.push({ use_case_id: ucId, variant_id: null });
+        }
+      });
+
+      if (rows.length > 0) {
+        const { error } = await supabase.from("validated_selections").insert(rows);
+        if (error) throw error;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["validated-selections"] });
+      alert("✅ Sélection validée et enregistrée avec succès !");
+    } catch (e) {
+      console.error("Save validation error:", e);
+      alert("Erreur lors de l'enregistrement de la validation.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedUseCases, selectedVariants, useCases, queryClient]);
 
   const detailMap = useMemo(() => {
     const m = new Map<string, any>();
