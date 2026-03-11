@@ -854,6 +854,42 @@ export type Database = {
           },
         ]
       }
+      validated_selections: {
+        Row: {
+          id: string
+          use_case_id: string
+          validated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          id?: string
+          use_case_id: string
+          validated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          id?: string
+          use_case_id?: string
+          validated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "validated_selections_use_case_id_fkey"
+            columns: ["use_case_id"]
+            isOneToOne: false
+            referencedRelation: "automation_use_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "validated_selections_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "automation_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
