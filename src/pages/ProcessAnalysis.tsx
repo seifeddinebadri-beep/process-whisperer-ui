@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { useLang } from "@/lib/i18n";
 import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
 import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
+import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
@@ -49,6 +50,10 @@ const ProcessAnalysis = () => {
         .in("status", ["analyzed", "approved"])
         .order("upload_date", { ascending: false });
       if (error) throw error;
+      if (!data || data.length === 0) {
+        // Mock fallback
+        return [{ id: "mock-process-1", file_name: "Comptabilité Fournisseurs (Démo)", status: "analyzed" }];
+      }
       return data;
     },
   });
@@ -60,12 +65,14 @@ const ProcessAnalysis = () => {
     }
   }, [processes, selectedProcessId]);
 
+  const isMockProcess = selectedProcessId === "mock-process-1";
   const currentProcess = processes.find((p) => p.id === selectedProcessId);
 
   // Fetch steps for selected process
   const { data: steps = [], isLoading: loadingSteps } = useQuery({
     queryKey: ["process-steps", selectedProcessId],
     queryFn: async () => {
+      if (isMockProcess) return mockProcessSteps;
       const { data, error } = await supabase
         .from("process_steps")
         .select("*")
@@ -123,6 +130,7 @@ const ProcessAnalysis = () => {
   const { data: context } = useQuery({
     queryKey: ["process-context", selectedProcessId],
     queryFn: async () => {
+      if (isMockProcess) return mockProcessContext;
       const { data, error } = await supabase
         .from("process_context")
         .select("*")
