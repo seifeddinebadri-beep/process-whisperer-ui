@@ -618,6 +618,49 @@ serve(async (req) => {
     // Update process status
     await supabase.from("uploaded_processes").update({ status: "analyzed" }).eq("id", process_id);
 
+    // Build KB context summary for persistence
+    let kb_context: any = null;
+    try {
+      const { data: proc } = await supabase
+        .from("uploaded_processes")
+        .select("company_id, department_id, entity_id, activity_id, service_id")
+        .eq("id", process_id)
+        .single();
+
+      if (proc?.company_id) {
+        kb_context = {};
+        const { data: company } = await supabase.from("companies").select("name, industry, size, strategy_notes").eq("id", proc.company_id).single();
+        if (company) kb_context.company = { name: company.name, industry: company.industry, size: company.size, strategy: company.strategy_notes };
+
+        if (proc.department_id) {
+          const { data: dept } = await supabase.from("departments").select("name").eq("id", proc.department_id).single();
+          if (dept) kb_context.department = dept.name;
+        }
+        if (proc.entity_id) {
+          const { data: entity } = await supabase.from("entities").select("name").eq("id", proc.entity_id).single();
+          if (entity) kb_context.entity = entity.name;
+        }
+        if (proc.activity_id) {
+          const { data: activity } = await supabase.from("activities").select("name, business_objective").eq("id", proc.activity_id).single();
+          if (activity) kb_context.activity = { name: activity.name, objective: activity.business_objective };
+
+          const { data: actTools } = await supabase.from("activity_tools").select("tool_id, tools(name)").eq("activity_id", proc.activity_id);
+          if (actTools?.length) kb_context.tools = actTools.map((t: any) => t.tools?.name).filter(Boolean);
+        }
+        if (proc.service_id) {
+          const { data: service } = await supabase.from("services").select("name, business_objective").eq("id", proc.service_id).single();
+          if (service) kb_context.service = { name: service.name, objective: service.business_objective };
+        }
+
+        // KB documents
+        const entityIds = [proc.company_id, proc.department_id, proc.entity_id, proc.activity_id, proc.service_id].filter(Boolean);
+        const { data: kbDocs } = await supabase.from("kb_documents").select("file_name").in("entity_id", entityIds);
+        if (kbDocs?.length) kb_context.documents = kbDocs.map((d: any) => d.file_name);
+      }
+    } catch (kbCtxErr) {
+      console.error("KB context summary build error:", kbCtxErr);
+    }
+
     // Log completion
     await supabase.from("agent_logs").insert({
       process_id, agent_name: "analyst", action: "analyze_as_is", status: "completed",
@@ -628,6 +671,7 @@ serve(async (req) => {
         gaps_count: gaps_identified?.length || 0,
         gaps: gaps_identified,
         has_pdf: !!pdf_path,
+        ...(kb_context ? { kb_context } : {}),
       },
     });
 

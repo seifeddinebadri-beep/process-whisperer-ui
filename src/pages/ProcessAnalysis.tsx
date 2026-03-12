@@ -687,6 +687,86 @@ const ProcessAnalysis = () => {
         </Card>
       )}
 
+      {/* KB Business Context Card */}
+      {(() => {
+        const kbCtx = (analystSummary?.metadata as any)?.kb_context;
+        if (!kbCtx) return null;
+        return (
+          <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex gap-3">
+                <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-4 w-4 text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-green-600 mb-2">
+                    {lang === "fr" ? "Contexte Métier — Base de Connaissances" : "Business Context — Knowledge Base"}
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    {kbCtx.company && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">{lang === "fr" ? "Entreprise" : "Company"}</p>
+                        <p className="text-foreground">{kbCtx.company.name}{kbCtx.company.industry ? ` • ${kbCtx.company.industry}` : ""}{kbCtx.company.size ? ` • ${kbCtx.company.size}` : ""}</p>
+                      </div>
+                    )}
+                    {kbCtx.company?.strategy && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">{lang === "fr" ? "Stratégie" : "Strategy"}</p>
+                        <p className="text-foreground text-xs">{kbCtx.company.strategy}</p>
+                      </div>
+                    )}
+                    {kbCtx.department && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">{lang === "fr" ? "Département" : "Department"}</p>
+                        <p className="text-foreground">{kbCtx.department}</p>
+                      </div>
+                    )}
+                    {kbCtx.entity && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">{lang === "fr" ? "Entité" : "Entity"}</p>
+                        <p className="text-foreground">{kbCtx.entity}</p>
+                      </div>
+                    )}
+                    {kbCtx.activity && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">{lang === "fr" ? "Activité" : "Activity"}</p>
+                        <p className="text-foreground">{kbCtx.activity.name}{kbCtx.activity.objective ? ` — ${kbCtx.activity.objective}` : ""}</p>
+                      </div>
+                    )}
+                    {kbCtx.service && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">Service</p>
+                        <p className="text-foreground">{kbCtx.service.name}{kbCtx.service.objective ? ` — ${kbCtx.service.objective}` : ""}</p>
+                      </div>
+                    )}
+                  </div>
+                  {kbCtx.tools?.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">{lang === "fr" ? "Outils référencés" : "Referenced Tools"}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {kbCtx.tools.map((tool: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs border-green-300 text-green-700">{tool}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {kbCtx.documents?.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">{lang === "fr" ? "Documents KB utilisés" : "KB Documents used"}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {kbCtx.documents.map((doc: string, i: number) => (
+                          <Badge key={i} variant="secondary" className="text-xs">{doc}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* Comparison View or Normal Steps */}
       {showComparison ? (
         <StepComparisonView
