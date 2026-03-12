@@ -50,6 +50,10 @@ const ProcessAnalysis = () => {
         .in("status", ["analyzed", "approved"])
         .order("upload_date", { ascending: false });
       if (error) throw error;
+      if (!data || data.length === 0) {
+        // Mock fallback
+        return [{ id: "mock-process-1", file_name: "Comptabilité Fournisseurs (Démo)", status: "analyzed" }];
+      }
       return data;
     },
   });
