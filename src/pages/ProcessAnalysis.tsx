@@ -72,6 +72,7 @@ const ProcessAnalysis = () => {
   const { data: steps = [], isLoading: loadingSteps } = useQuery({
     queryKey: ["process-steps", selectedProcessId],
     queryFn: async () => {
+      if (isMockProcess) return mockProcessSteps;
       const { data, error } = await supabase
         .from("process_steps")
         .select("*")
