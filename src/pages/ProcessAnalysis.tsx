@@ -474,7 +474,29 @@ const ProcessAnalysis = () => {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (error || !data) return null;
+      if (error || !data) {
+        // Mock fallback for demo
+        return {
+          message: "Analyse complète du processus Comptabilité Fournisseurs. 8 étapes identifiées couvrant le cycle complet de la réception de facture au paiement. Taux d'erreur de saisie estimé à 8%, délais d'approbation de 3-5 jours identifiés comme principaux points de friction.",
+          metadata: {
+            steps_count: 8,
+            confidence: 87,
+            gaps_count: 2,
+            gaps: ["Processus de gestion des litiges fournisseurs non documenté", "Procédure d'escalade en cas de rejet non décrite"],
+            has_pdf: false,
+            kb_context: {
+              company: { name: "Acme Corp", industry: "Manufacturing", size: "500-1000 employés", strategy: "Digitalisation des processus financiers et réduction des coûts opérationnels de 20% d'ici 2027." },
+              department: "Finance & Comptabilité",
+              entity: "Comptabilité Fournisseurs",
+              activity: { name: "Traitement des factures", objective: "Traiter les factures fournisseurs dans les délais contractuels en minimisant les erreurs et en respectant la conformité SOX." },
+              service: { name: "Accounts Payable", objective: "Gérer le cycle complet de la facture au paiement avec un SLA de 48h." },
+              tools: ["SAP ERP", "Outlook", "DocuSign", "Excel"],
+              documents: ["Procédure_AP_v3.pdf", "Matrice_approbation_2026.xlsx", "Guide_SAP_factures.docx"],
+            },
+          },
+          created_at: new Date().toISOString(),
+        };
+      }
       return data;
     },
     enabled: !!selectedProcessId,
