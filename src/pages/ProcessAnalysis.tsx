@@ -65,6 +65,7 @@ const ProcessAnalysis = () => {
     }
   }, [processes, selectedProcessId]);
 
+  const isMockProcess = selectedProcessId === "mock-process-1";
   const currentProcess = processes.find((p) => p.id === selectedProcessId);
 
   // Fetch steps for selected process
