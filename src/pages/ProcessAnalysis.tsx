@@ -130,6 +130,7 @@ const ProcessAnalysis = () => {
   const { data: context } = useQuery({
     queryKey: ["process-context", selectedProcessId],
     queryFn: async () => {
+      if (isMockProcess) return mockProcessContext;
       const { data, error } = await supabase
         .from("process_context")
         .select("*")
