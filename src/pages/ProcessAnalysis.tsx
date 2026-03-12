@@ -18,6 +18,7 @@ import { useLang } from "@/lib/i18n";
 import { ClarificationPanel } from "@/components/process-analysis/ClarificationPanel";
 import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from "@/components/process-analysis/types";
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
+import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
