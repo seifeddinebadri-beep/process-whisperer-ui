@@ -619,6 +619,9 @@ const ProcessAnalysis = () => {
   const hasStepsButNoActions = displaySteps.length > 0 && totalActions === 0;
 
   const [extractingActions, setExtractingActions] = useState(false);
+  const [uploadingEventLog, setUploadingEventLog] = useState(false);
+  const eventLogInputRef = useRef<HTMLInputElement>(null);
+
   const extractActionsMutation = useMutation({
     mutationFn: async () => {
       setExtractingActions(true);
@@ -638,6 +641,36 @@ const ProcessAnalysis = () => {
       setExtractingActions(false);
     },
   });
+
+  const handleEventLogUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProcessId) return;
+    const validExts = ["csv", "json", "txt", "zip"];
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (!ext || !validExts.includes(ext)) {
+      toast({ title: "Format non supporté", description: "Formats acceptés : .csv, .json, .txt, .zip", variant: "destructive" });
+      return;
+    }
+    setUploadingEventLog(true);
+    try {
+      const path = `event-logs/${selectedProcessId}/${file.name}`;
+      const { error: upErr } = await supabase.storage.from("process-files").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      toast({ title: "Fichier uploadé", description: "Analyse des variantes en cours..." });
+      const { data, error } = await supabase.functions.invoke("analyze-event-log-variants", {
+        body: { process_id: selectedProcessId, file_path: path },
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["process-variants", selectedProcessId] });
+      queryClient.invalidateQueries({ queryKey: ["variant-comparison-data", selectedProcessId] });
+      toast({ title: "Analyse terminée", description: `${data?.variants_count || 0} variantes détectées à partir de ${data?.traces_count || 0} traces.` });
+    } catch (err: any) {
+      toast({ title: "Erreur", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingEventLog(false);
+      if (eventLogInputRef.current) eventLogInputRef.current.value = "";
+    }
+  };
 
   if (loadingProcesses) {
     return (
