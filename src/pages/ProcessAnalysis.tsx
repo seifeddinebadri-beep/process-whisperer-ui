@@ -1006,6 +1006,21 @@ const ProcessAnalysis = () => {
         </CardContent>
       </Card>
 
+      {/* Variant Analysis */}
+      <VariantAnalysisPanel processId={selectedProcessId} />
+
+      {/* Variant Comparison Flow */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {lang === "fr" ? "Comparaison des Variantes" : "Variant Comparison"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <VariantComparisonFlow processId={selectedProcessId} />
+        </CardContent>
+      </Card>
+
       {/* Screenshots Gallery */}
       {screenshots.length > 0 && (
         <div id="screenshot-gallery">
