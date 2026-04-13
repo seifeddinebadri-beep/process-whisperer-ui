@@ -1,97 +1,71 @@
 
 
-## Plan: Rename KB hierarchy, add delete, add document upload
+## Plan: Event Log Upload with Variant Detection in Process Analysis
 
-### 1. Rename hierarchy labels (i18n only, no DB changes)
+### What
+Add the ability to upload event log files (.csv, .json, .txt) or .zip archives directly within the Process Analysis module. The system will parse the logs, segment traces by consultant/resource, detect process variants, and render a comparative view highlighting differences across execution patterns.
 
-Update `src/lib/i18n.tsx` — the KB section labels:
-- "Companies" stays as top level (unchanged)
-- Current "Departments" → **"Départements"** (stays same in FR, already correct)
-- Current "Entities" → **"Entités"** (stays same)  
-- Current "Activities" → **"Activités"** (stays same)
+### Database Changes
 
-Wait — re-reading the user request: "Department -> Entity -> Activity -> Service". This means the hierarchy levels should be renamed:
-- Level 1 (was "Department") → **"Département"** (no change)
-- Level 2 (was "Entity") → **"Entité"** (no change)  
-- Level 3 (was "Activity") → **"Activité"** (no change)
-- Level 4 → **"Service"** (NEW level, or rename Activity to Service?)
+**New table: `process_variants`**
+- `id` (uuid PK), `process_id` (FK → uploaded_processes), `variant_label` (text, e.g. "Variant A — Consultant X"), `consultant_name` (text), `frequency` (int — how many traces follow this variant), `avg_duration_minutes` (float), `steps_json` (jsonb — ordered array of step names/IDs), `insights` (jsonb — array of textual insights), `created_at` (timestamptz)
 
-Actually, the user says "rename it": the current hierarchy under a company is Department > Entity > Activity. The user wants it labeled as **Department > Entity > Activity > Service**. This adds a new level "Service" under Activity, OR renames the existing levels.
+**New table: `variant_steps`**
+- `id` (uuid PK), `variant_id` (FK → process_variants), `step_name` (text), `step_order` (int), `is_skipped` (bool default false), `is_extra` (bool default false), `is_reordered` (bool default false), `avg_duration_seconds` (float), `frequency_pct` (float — % of traces including this step)
 
-Given the DB structure (departments → entities → activities), the simplest interpretation is renaming the labels:
-- What was "Department" → **"Département"** (same)
-- What was "Entity" → **"Entité"** (same)  
-- What was "Activity" → **"Activité"** (same)
+RLS: open read, service-role write (no auth currently).
 
-But that's 3 levels, and the user listed 4. I think the user wants to rename the 3 existing sub-levels under Company:
-- "Departments" → **"Department"** 
-- "Entities" → **"Entity"**
-- "Activities" → **"Activity"**
+### Edge Function: `analyze-event-log-variants`
 
-And add a 4th level: **"Service"** under Activity.
+Receives `{ process_id, file_path }`. Steps:
+1. Download file from storage bucket `process-files`
+2. If `.zip`, extract individual CSVs using `JSZip`
+3. Parse each CSV/JSON to extract events with columns: `case_id`, `activity`, `resource/consultant`, `timestamp`
+4. Group traces by `resource` → build per-consultant ordered step sequences
+5. Cluster identical sequences into variants
+6. Call Lovable AI (gemini-2.5-flash) with the variant data to generate insights like "Consultant A skips Step 3 in 70% of cases"
+7. Persist results into `process_variants` + `variant_steps`
+8. Log in `agent_logs`
 
-OR the user wants to rename the 3 levels as: Department, Entity, Activity, Service — meaning rename what was "Activity" to "Service" and add "Activity" as a middle level. That would require a new DB table.
+### Frontend Changes
 
-**Simplest interpretation**: Rename the 3 existing levels to match the user's naming, and the last one "Service" replaces "Activity" label. So:
-- Level 1: Department (same)
-- Level 2: Entity (same)  
-- Level 3: Activity (same — currently "Entity" in DB)
-- Level 4: Service (currently "Activity" in DB, renamed to "Service")
+**1. Upload section in ProcessAnalysis.tsx**
+- Add an "Upload Event Log" button (with Upload icon) in the process header area
+- Accept `.csv`, `.json`, `.txt`, `.zip` files
+- On upload: store in `process-files` bucket, call `analyze-event-log-variants` edge function
+- Show progress via toast/loader
 
-Actually, I think the user just wants the labels to be exactly: **Department → Entity → Activity → Service**. Since there are currently only 3 levels under Company (Department, Entity, Activity), this means adding a **4th level: Service** under Activity. This requires a new DB table `services`.
+**2. New component: `VariantAnalysisPanel.tsx`**
+- Query `process_variants` + `variant_steps` for the selected process
+- Display a summary card showing: number of variants detected, number of consultants, total traces
+- For each variant: collapsible card with consultant name, frequency, avg duration
+- Color-coded step list: green = standard, red = skipped, blue = extra, orange = reordered
+- Insights section with AI-generated observations as bullet points
 
-Let me go with the most practical interpretation: **add a new "Service" level under Activity**, requiring a new `services` table.
+**3. New component: `VariantComparisonFlow.tsx`**
+- Side-by-side or overlay BPMN-like flow view using ReactFlow
+- Each variant rendered as a lane/column
+- Shared steps aligned horizontally; deviations highlighted with colored borders
+- Legend explaining color coding
 
-### Changes
+**4. Integration in ProcessAnalysis page**
+- New tab or section below BPMN flow: "Analyse des Variantes"
+- Only visible when variant data exists for the selected process
+- Includes both the panel and comparative flow view
 
-**A. Database migration — create `services` table**
-```sql
-CREATE TABLE public.services (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  activity_id uuid NOT NULL REFERENCES public.activities(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  description text,
-  business_objective text,
-  documentation text[]
-);
-ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
--- RLS policies (public access like other KB tables)
-CREATE POLICY "Allow public read services" ON public.services FOR SELECT USING (true);
-CREATE POLICY "Allow public insert services" ON public.services FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public delete services" ON public.services FOR DELETE USING (true);
-CREATE POLICY "Allow public update services" ON public.services FOR UPDATE USING (true);
-```
+### Files
 
-Also create a `kb_documents` table for uploaded documents at any level:
-```sql
-CREATE TABLE public.kb_documents (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  file_name text NOT NULL,
-  file_path text NOT NULL,
-  entity_type text NOT NULL, -- 'company','department','entity','activity','service'
-  entity_id uuid NOT NULL,
-  uploaded_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.kb_documents ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read kb_documents" ON public.kb_documents FOR SELECT USING (true);
-CREATE POLICY "Allow public insert kb_documents" ON public.kb_documents FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public delete kb_documents" ON public.kb_documents FOR DELETE USING (true);
-```
+| Action | File |
+|--------|------|
+| Migration | `process_variants` + `variant_steps` tables |
+| Create | `supabase/functions/analyze-event-log-variants/index.ts` |
+| Create | `src/components/process-analysis/VariantAnalysisPanel.tsx` |
+| Create | `src/components/process-analysis/VariantComparisonFlow.tsx` |
+| Edit | `src/pages/ProcessAnalysis.tsx` — upload button + variant section |
 
-**B. Update `src/lib/i18n.tsx`**
-- Add new KB translations for Service level: `services`, `addService`, `serviceName`, `serviceAdded`, `addNewService`, `serviceDetails`
-- Add delete-related translations: `confirmDelete`, `deleted`
-- Add document upload translations: `uploadDocument`, `documentUploaded`
-
-**C. Update `src/pages/KnowledgeBase.tsx`**
-1. **Add Service level**: New view "services", queries, mutations, navigation, cards — following the same pattern as activities
-2. **Add delete buttons** on each card (company, department, entity, activity, service) with confirmation dialog. Each delete calls `supabase.from("tableName").delete().eq("id", id)` and invalidates queries.
-3. **Add document upload**: A file input + upload button on each level's view. Files uploaded to the `process-files` bucket under a path like `kb/{entity_type}/{entity_id}/{filename}`. Record saved in `kb_documents` table. Display uploaded documents as badges with delete option.
-
-**D. Update Activity view**: Currently clicking an Activity opens a detail Sheet. Now clicking an Activity navigates to the Services list (new level). The detail sheet moves to Service level.
-
-### File changes summary
-- **Migration**: 1 new migration (services table + kb_documents table)
-- `src/lib/i18n.tsx`: Add service + delete + upload translations
-- `src/pages/KnowledgeBase.tsx`: Add services level, delete buttons on all levels, document upload UI
+### Technical Notes
+- ZIP parsing uses `JSZip` (available via esm.sh in Deno edge functions)
+- CSV parsing done manually (split lines, detect delimiter) — no heavy library needed
+- The AI call generates structured insights in JSON via function calling
+- Mock data included for demo process to preview the UI immediately
 
