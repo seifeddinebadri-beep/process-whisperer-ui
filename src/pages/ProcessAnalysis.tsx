@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter, ImageIcon, Upload, Building2 } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter, ImageIcon, Upload, Building2, FileUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -20,6 +20,8 @@ import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from 
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
+import { VariantAnalysisPanel } from "@/components/process-analysis/VariantAnalysisPanel";
+import { VariantComparisonFlow } from "@/components/process-analysis/VariantComparisonFlow";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
