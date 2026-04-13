@@ -719,6 +719,25 @@ const ProcessAnalysis = () => {
           <Bot className="h-4 w-4 mr-1" />
           {t.clarification.openPanel}
         </Button>
+        <div>
+          <input
+            ref={eventLogInputRef}
+            type="file"
+            accept=".csv,.json,.txt,.zip"
+            className="hidden"
+            onChange={handleEventLogUpload}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => eventLogInputRef.current?.click()}
+            disabled={uploadingEventLog || !selectedProcessId}
+          >
+            {uploadingEventLog ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileUp className="h-4 w-4 mr-1" />}
+            {lang === "fr" ? "Event Log" : "Event Log"}
+          </Button>
+        </div>
+        </Button>
       </div>
 
       {/* Analyst Agent Summary Card */}
