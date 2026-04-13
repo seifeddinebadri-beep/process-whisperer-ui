@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.extract-pdf-screenshots]
 verify_jwt = false
+
+[functions.analyze-event-log-variants]
+verify_jwt = false

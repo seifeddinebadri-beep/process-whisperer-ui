@@ -636,6 +636,50 @@ export type Database = {
           },
         ]
       }
+      process_variants: {
+        Row: {
+          avg_duration_minutes: number | null
+          consultant_name: string | null
+          created_at: string
+          frequency: number | null
+          id: string
+          insights: Json | null
+          process_id: string
+          steps_json: Json | null
+          variant_label: string | null
+        }
+        Insert: {
+          avg_duration_minutes?: number | null
+          consultant_name?: string | null
+          created_at?: string
+          frequency?: number | null
+          id?: string
+          insights?: Json | null
+          process_id: string
+          steps_json?: Json | null
+          variant_label?: string | null
+        }
+        Update: {
+          avg_duration_minutes?: number | null
+          consultant_name?: string | null
+          created_at?: string
+          frequency?: number | null
+          id?: string
+          insights?: Json | null
+          process_id?: string
+          steps_json?: Json | null
+          variant_label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_variants_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           activity_id: string
@@ -886,6 +930,50 @@ export type Database = {
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "automation_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      variant_steps: {
+        Row: {
+          avg_duration_seconds: number | null
+          frequency_pct: number | null
+          id: string
+          is_extra: boolean
+          is_reordered: boolean
+          is_skipped: boolean
+          step_name: string
+          step_order: number
+          variant_id: string
+        }
+        Insert: {
+          avg_duration_seconds?: number | null
+          frequency_pct?: number | null
+          id?: string
+          is_extra?: boolean
+          is_reordered?: boolean
+          is_skipped?: boolean
+          step_name: string
+          step_order?: number
+          variant_id: string
+        }
+        Update: {
+          avg_duration_seconds?: number | null
+          frequency_pct?: number | null
+          id?: string
+          is_extra?: boolean
+          is_reordered?: boolean
+          is_skipped?: boolean
+          step_name?: string
+          step_order?: number
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "variant_steps_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "process_variants"
             referencedColumns: ["id"]
           },
         ]

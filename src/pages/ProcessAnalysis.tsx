@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter, ImageIcon, Upload, Building2 } from "lucide-react";
+import { CheckCircle2, Plus, Loader2, Bot, GitCompare, Rocket, Brain, AlertTriangle, Play, Trash2, Search, X, Filter, ImageIcon, Upload, Building2, FileUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -20,6 +20,8 @@ import type { ProcessStep, ProcessContext, ProcessScreenshot, StepAction } from 
 import { mockEventLogSteps, mockKBSteps } from "@/data/mockComparisonSteps";
 import { mockProcessSteps, mockProcessContext } from "@/data/mockProcessAnalysisData";
 import { BpmnFlowView } from "@/components/process-analysis/BpmnFlowView";
+import { VariantAnalysisPanel } from "@/components/process-analysis/VariantAnalysisPanel";
+import { VariantComparisonFlow } from "@/components/process-analysis/VariantComparisonFlow";
 import { ScreenshotGallery } from "@/components/process-analysis/ScreenshotGallery";
 import { AgentDiscoveryModal } from "@/components/agents/AgentDiscoveryModal";
 import { AgentOrchestratorModal } from "@/components/agents/AgentOrchestratorModal";
@@ -617,6 +619,9 @@ const ProcessAnalysis = () => {
   const hasStepsButNoActions = displaySteps.length > 0 && totalActions === 0;
 
   const [extractingActions, setExtractingActions] = useState(false);
+  const [uploadingEventLog, setUploadingEventLog] = useState(false);
+  const eventLogInputRef = useRef<HTMLInputElement>(null);
+
   const extractActionsMutation = useMutation({
     mutationFn: async () => {
       setExtractingActions(true);
@@ -636,6 +641,36 @@ const ProcessAnalysis = () => {
       setExtractingActions(false);
     },
   });
+
+  const handleEventLogUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProcessId) return;
+    const validExts = ["csv", "json", "txt", "zip"];
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (!ext || !validExts.includes(ext)) {
+      toast({ title: "Format non supporté", description: "Formats acceptés : .csv, .json, .txt, .zip", variant: "destructive" });
+      return;
+    }
+    setUploadingEventLog(true);
+    try {
+      const path = `event-logs/${selectedProcessId}/${file.name}`;
+      const { error: upErr } = await supabase.storage.from("process-files").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      toast({ title: "Fichier uploadé", description: "Analyse des variantes en cours..." });
+      const { data, error } = await supabase.functions.invoke("analyze-event-log-variants", {
+        body: { process_id: selectedProcessId, file_path: path },
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["process-variants", selectedProcessId] });
+      queryClient.invalidateQueries({ queryKey: ["variant-comparison-data", selectedProcessId] });
+      toast({ title: "Analyse terminée", description: `${data?.variants_count || 0} variantes détectées à partir de ${data?.traces_count || 0} traces.` });
+    } catch (err: any) {
+      toast({ title: "Erreur", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingEventLog(false);
+      if (eventLogInputRef.current) eventLogInputRef.current.value = "";
+    }
+  };
 
   if (loadingProcesses) {
     return (
@@ -684,6 +719,24 @@ const ProcessAnalysis = () => {
           <Bot className="h-4 w-4 mr-1" />
           {t.clarification.openPanel}
         </Button>
+        <div>
+          <input
+            ref={eventLogInputRef}
+            type="file"
+            accept=".csv,.json,.txt,.zip"
+            className="hidden"
+            onChange={handleEventLogUpload}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => eventLogInputRef.current?.click()}
+            disabled={uploadingEventLog || !selectedProcessId}
+          >
+            {uploadingEventLog ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileUp className="h-4 w-4 mr-1" />}
+            {lang === "fr" ? "Event Log" : "Event Log"}
+          </Button>
+        </div>
       </div>
 
       {/* Analyst Agent Summary Card */}
@@ -950,6 +1003,21 @@ const ProcessAnalysis = () => {
         </CardHeader>
         <CardContent>
           <BpmnFlowView steps={displaySteps} />
+        </CardContent>
+      </Card>
+
+      {/* Variant Analysis */}
+      <VariantAnalysisPanel processId={selectedProcessId} />
+
+      {/* Variant Comparison Flow */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {lang === "fr" ? "Comparaison des Variantes" : "Variant Comparison"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <VariantComparisonFlow processId={selectedProcessId} />
         </CardContent>
       </Card>
 
