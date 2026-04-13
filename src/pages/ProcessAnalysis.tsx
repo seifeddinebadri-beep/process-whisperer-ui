@@ -737,7 +737,6 @@ const ProcessAnalysis = () => {
             {lang === "fr" ? "Event Log" : "Event Log"}
           </Button>
         </div>
-        </Button>
       </div>
 
       {/* Analyst Agent Summary Card */}
